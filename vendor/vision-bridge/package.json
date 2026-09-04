@@ -1,0 +1,26 @@
+{
+  "name": "@ti-agent/vision-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vision bridge engine library (vendored): analyzes images with a vision-language model for text-only models. Vendored into dsh-vision-bridge; source logic unchanged from the upstream vision-bridge snapshot 2026-09-04 (github.com/shenhuanageshei/vision-bridge).",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  }
+}

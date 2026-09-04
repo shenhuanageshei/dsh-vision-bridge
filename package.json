@@ -1,0 +1,61 @@
+{
+  "name": "@dsh-external/dsh-vision-bridge",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness vision bridge: session screenshots route by model capability. Image-capable models receive attachments inline; text-only models see the standard placeholder, and the bridge reads the image through a vision-language model — on demand via the vision_bridge_read tool or automatically via agent/pre-step context injection. 会话截图按模型能力自动分流：多模态模型原样直读；纯文本模型经 VLM 代读（tool/auto 双模式）。",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "vendor/vision-bridge/dist",
+    "vendor/vision-bridge/src",
+    "vendor/vision-bridge/VENDOR.md",
+    "vendor/vision-bridge/package.json",
+    "docs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "vision",
+    "screenshot",
+    "vlm",
+    "accessibility"
+  ],
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "build:vendor": "cd vendor/vision-bridge && npm run build",
+    "test:vendor": "cd vendor/vision-bridge && npm test",
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5",
+    "@deepseek-ai/dsh-agent": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-attachment": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-credentials": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-llm": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-session": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.0-rc <2",
+    "@deepseek-ai/schemastery": ">=3.18.0 <4",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc <2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  }
+}
