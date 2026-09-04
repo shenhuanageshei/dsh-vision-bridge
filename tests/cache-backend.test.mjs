@@ -46,9 +46,20 @@ describe('NamespacedNoteCache', () => {
     const cache = new NamespacedNoteCache('tool', dir);
     cache.set('k1', 'note-1');
     assert.equal(fs.existsSync(path.join(dir, 'tool.json')), false, 'write is debounced, not synchronous');
-    await cache.flushNow();
+    await cache.close(); // close must flush the debounce-window entry itself
     assert.equal(fs.existsSync(path.join(dir, 'tool.json')), true);
+    const persisted = JSON.parse(fs.readFileSync(path.join(dir, 'tool.json'), 'utf8'));
+    assert.equal(persisted.k1.value, 'note-1', 'close() must persist entries written inside the debounce window');
+  });
+
+  it('close() without any manual flush lands the value on disk (fiber-restart safety)', async () => {
+    const cache = new NamespacedNoteCache('tool', dir);
+    cache.set('window-entry', 'survives-close');
+    // no flushNow() — exactly what happens when a fiber restarts mid-window
     await cache.close();
+    const reloaded = new NamespacedNoteCache('tool', dir);
+    assert.equal(reloaded.get('window-entry'), 'survives-close');
+    await reloaded.close();
   });
 
   it('tool and auto namespaces never see each other\u2019s entries', async () => {

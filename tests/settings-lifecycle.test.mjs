@@ -94,20 +94,29 @@ describe('ensureFrozenDefaults (first-run toolkit copy, then frozen)', () => {
     assert.equal(reads.filter((n) => n === 'vision-toolkit').length, 0, 'no live toolkit reads after freezing');
   });
 
-  it('falls back to baked defaults when the toolkit namespace is unavailable', () => {
+  it('defers the freeze (returns undefined, writes nothing) when the toolkit namespace is unavailable', () => {
     const dir = makeDir();
     const file = path.join(dir, 'provider-defaults.json');
     const frozen = ensureFrozenDefaults({ get() { throw new Error('no such namespace'); } }, file, { warn() {}, info() {} });
-    assert.equal(frozen.baseURL.length > 0, true);
-    assert.equal(frozen.model.length > 0, true);
+    assert.equal(frozen, undefined, 'nothing may be frozen without toolkit values');
+    assert.equal(fs.existsSync(file), false, 'the baked fallback must NOT be persisted over a missing toolkit');
   });
 
-  it('a corrupt frozen file degrades to baked defaults without crashing', () => {
+  it('a corrupt frozen file degrades gracefully; a later toolkit read repairs it', () => {
     const dir = makeDir();
     const file = path.join(dir, 'provider-defaults.json');
     fs.writeFileSync(file, '{broken json', 'utf8');
+    // toolkit still absent: nothing frozen, no crash
     const frozen = ensureFrozenDefaults({ get() { return undefined; } }, file, { warn() {}, info() {} });
-    assert.equal(frozen.model.length > 0, true);
+    assert.equal(frozen, undefined);
+    // toolkit becomes available: the corrupt file is replaced by real values
+    const repaired = ensureFrozenDefaults(
+      { get() { return { provider: { baseUrl: 'https://toolkit.example/v1', model: 'toolkit-vl' } }; } },
+      file,
+      { warn() {}, info() {} },
+    );
+    assert.deepEqual(repaired, { baseURL: 'https://toolkit.example/v1', model: 'toolkit-vl' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), repaired);
   });
 });
 
@@ -202,7 +211,9 @@ describe('apply() — credential + attachment chain through the tool', () => {
     const dir = makeDir();
     const realFetch = globalThis.fetch;
     let seenInit;
+    let fetchCalls = 0;
     globalThis.fetch = async (url, init) => {
+      fetchCalls += 1;
       seenInit = { url: String(url), init };
       return {
         ok: true,
@@ -232,29 +243,70 @@ describe('apply() — credential + attachment chain through the tool', () => {
       assert.match(seenInit.init.headers.Authorization, /^Bearer sk-test$/);
       assert.equal(ctx.lastReadRef.attachmentId, ID_A, 'the durable ref must reach readImageRequest');
       assert.equal(ctx.lastReadPolicy.maxPixels, 40000000);
-      // cache: second identical call does not refetch
-      const fetchCalls = 1;
+      assert.equal(fetchCalls, 1, 'exactly one VLM HTTP call for the first answer');
+      // cache: second identical call serves from cache — no second VLM request
       await tool.execute({ ref: ID_A.slice(7, 15), question: '什么内容' }, exec);
       assert.equal(ctx.lastReadRef.attachmentId, ID_A);
+      assert.equal(fetchCalls, 1, 'cache hit must not refetch');
       await disposer();
-      void fetchCalls;
     } finally {
       globalThis.fetch = realFetch;
     }
   });
 
-  it('mode=tool disables the auto event path at runtime', async () => {
+  it('mode=tool gates the auto event path: an image event triggers no VLM work', async () => {
     const dir = makeDir();
-    const ctx = makeFakeCtx();
-    const disposer = await apply(ctx, {
-      provider: { baseURL: 'https://api.example.com/v1', model: 'vl' },
-      mode: 'tool',
-      cache: { persistDir: path.join(dir, 'cache') },
-    });
-    // auto listener installed but gated: with no injection seam to observe, we
-    // assert via the PromptContext (no pending notes) after an event would run.
-    const before = ctx.registered.contexts.length;
-    assert.equal(before, 1);
-    await disposer();
+    const realFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ choices: [{ message: { content: 'x' } }] }) };
+    };
+    try {
+      const ctx = makeFakeCtx();
+      const disposer = await apply(ctx, {
+        provider: { baseURL: 'https://api.example.com/v1', model: 'vl' },
+        mode: 'tool',
+        cache: { persistDir: path.join(dir, 'cache') },
+      });
+      // drive the real listener the way the runtime would
+      const onEvent = ctx.registered.handlers.get('session/event');
+      onEvent({ id: 'session-x' }, imageEvent(1, ID_A));
+      await new Promise((r) => setTimeout(r, 10));
+      assert.equal(fetchCalls, 0, 'mode=tool must not auto-analyze new images');
+      // and the PromptContext fallback stays empty for that session
+      const promptText = ctx.registered.contexts[0].text({ agent: { session: { id: 'session-x' } } });
+      assert.equal(promptText, '');
+      await disposer();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('toolkit namespace unregistered → freeze is deferred (no file, no baked persistence)', async () => {
+    const dir = makeDir();
+    const prevHome = process.env.DSH_HOME;
+    process.env.DSH_HOME = dir;
+    try {
+      const ctx = makeFakeCtx();
+      ctx.settings.get = () => undefined; // sibling bundle not registered yet
+      const disposer = await apply(ctx, { cache: { persistDir: path.join(dir, 'cache') } });
+      const frozenFile = path.join(dir, 'vision-bridge', 'provider-defaults.json');
+      assert.equal(fs.existsSync(frozenFile), false, 'no freeze file must be written without toolkit values');
+      // the schema section stays empty; runtime resolution fell back to baked
+      // defaults WITHOUT persisting them
+      assert.equal(ctx.settingsScope.get().provider.baseURL, '');
+      await disposer();
+
+      // a later apply WITH the toolkit present performs the real freeze
+      const ctx2 = makeFakeCtx();
+      const disposer2 = await apply(ctx2, { cache: { persistDir: path.join(dir, 'cache') } });
+      assert.equal(fs.existsSync(frozenFile), true, 'the deferred freeze lands once the toolkit namespace exists');
+      assert.deepEqual(JSON.parse(fs.readFileSync(frozenFile, 'utf8')), { baseURL: 'https://toolkit.example/v1', model: 'toolkit-vl' });
+      await disposer2();
+    } finally {
+      if (prevHome === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = prevHome;
+    }
   });
 });

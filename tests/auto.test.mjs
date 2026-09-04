@@ -231,4 +231,39 @@ describe('auto mode', () => {
     ctx.handlers.get('agent/created')({ agent: { session: { id: 'session-1', snapshotEvents: () => events } } });
     assert.match(logs.info.join('\n'), /backfill: 2 known image/);
   });
+
+  it('same image + different question analyzes twice (dedup key includes the question)', async () => {
+    const { ctx, analyzed, queue } = makeRuntime();
+    const s = session();
+    ctx.handlers.get('session/event')(s, imageEvent(1, ID_A, '第一问'));
+    ctx.handlers.get('session/event')(s, imageEvent(2, ID_A, '第二问'));
+    assert.equal(analyzed.length, 2, 'different questions on the same image must each analyze');
+    assert.equal(queue.length, 2);
+  });
+
+  it('same image + same question dedupes to one analysis', async () => {
+    const { ctx, analyzed, queue } = makeRuntime();
+    const s = session();
+    ctx.handlers.get('session/event')(s, imageEvent(1, ID_A, 'same question'));
+    ctx.handlers.get('session/event')(s, imageEvent(2, ID_A, 'same question'));
+    assert.equal(analyzed.length, 1, 'same image + same question stays deduped');
+    assert.equal(queue.length, 1);
+  });
+
+  it('turn cancellation releases the pre-step bounded wait immediately (no orphan timer)', async () => {
+    const { ctx, queue } = makeRuntime({ timeoutMs: 5000 });
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A));
+    const signalController = new AbortController();
+    const started = Date.now();
+    const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: signalController.signal });
+    await new Promise((r) => setTimeout(r, 20));
+    signalController.abort(new Error('user hit stop'));
+    const decision = await decisionPromise;
+    const elapsed = Date.now() - started;
+    assert.equal(decision.messages.length, 1, 'cancelled wait passes the step through unchanged');
+    assert.ok(elapsed < 1000, `cancellation must release the wait immediately (took ${elapsed}ms of a 5000ms budget)`);
+    // the analysis itself was linked-aborted; nothing injected later
+    await new Promise((r) => setTimeout(r, 5));
+    assert.ok(queue[0] !== undefined);
+  });
 });

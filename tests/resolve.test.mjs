@@ -52,6 +52,18 @@ describe('normalizeRef', () => {
     assert.throws(() => normalizeRef('hello world'), /attachment id/);
     assert.throws(() => normalizeRef('../etc/passwd'), /attachment id/);
   });
+
+  it('rejects an empty prefix after the sha256: keyword', () => {
+    assert.throws(() => normalizeRef('sha256:'), /empty after the sha256: prefix/);
+    assert.throws(() => normalizeRef('sha256:   '), /empty after the sha256: prefix/);
+  });
+
+  it('rejects more than 64 hex chars with a precise message', () => {
+    assert.throws(() => normalizeRef('a'.repeat(65)), /65 hex chars.*at most 64/s);
+    assert.throws(() => normalizeRef('sha256:' + 'b'.repeat(80)), /80 hex chars/);
+    // exactly 64 is fine
+    assert.equal(normalizeRef('c'.repeat(64)).hex, 'c'.repeat(64));
+  });
 });
 
 describe('collectSessionImages (snapshotEvents full scan)', () => {
@@ -150,6 +162,17 @@ describe('placeholder text handling', () => {
     assert.equal(cleaned.includes('image omitted'), false);
     assert.match(cleaned, /看这张图/);
     assert.match(cleaned, /谢谢/);
+  });
+
+  it('cleans truncated-placeholder residue when a name/path closes the bracket early', () => {
+    // An offloaded form whose read-only path ends early (name contains a
+    // closing bracket) leaves a bare 'attachment sha256:xxxxxxxx]' tail.
+    const text = 'look at [image omitted to fit request image limits; screenshot].png; attachment sha256:12345678] please';
+    const cleaned = stripPlaceholders(text);
+    assert.equal(cleaned.includes('image omitted'), false);
+    assert.equal(cleaned.includes('attachment sha256:'), false, 'residue tail must be removed');
+    assert.match(cleaned, /look at/);
+    assert.match(cleaned, /please/);
   });
 
   it('extracts 8-hex prefixes from placeholder text', () => {
