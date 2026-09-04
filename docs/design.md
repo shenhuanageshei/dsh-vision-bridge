@@ -82,7 +82,7 @@ vision-bridge 库现状缺 package.json/tsconfig 且 .js specifiers 无 dist,不
 
 ### 5.4 auto 模式(M3)
 
-- 触发:`ctx.on('session/event')` 过滤新到 `user/message` 含图;`agent/created` 时 `snapshotEvents()` 回填;fork 全量继承。
+- 触发:`ctx.on('session/event')` 过滤新到 `user/message` 含图;`agent/created` 时仅做诊断计数(tool 模式每次现场全量扫,无需回填索引)〔评审#14 定版〕;fork 全量继承。
 - 分析:async analyze(userRequest=当前消息归一化文本,**先清洗 DSH 占位符**再 normalize;纯图传空走库回退);超时/失败吞掉只记日志,绝不阻塞回合。
 - **同步登记在途 Promise**〔评审#3〕:监听器入口、任何 await 之前,按 `session + 事件序号` 同步登记 in-flight Promise(消除"pre-step 先于登记"竞态)。
 - 注入:`agent/pre-step` waterfall——await 该 in-flight Promise(有界超时),以 `PreStepDecision{kind:'enter', messages:[…, <vision-context> UserMessage]}` 追加,**同轮可见**;并按进入消息实际携带的 attachment id 做**相关性匹配,只注入匹配结果**;超时/失败/无匹配一律放行,由 tool 模式兜底。每条 note 标注"该解读回答的是附图当时的问题"(重放防误导)。
@@ -120,7 +120,7 @@ vision-bridge:
     outputFormat: auto   # auto | hanako | gemini | qwen | anchor
   language: zh
   autoMode:
-    maxPerTurn: 3
+    maxPerTurn: 3   # 语义:每条 user/message 事件最多分析的图片数(评审#15 定版)
 ```
 
 Web 设置页由 settings 服务自动渲染;首次运行显式拷贝 toolkit provider 默认值后本地固化,**不 live 读 toolkit 命名空间**(防 schema 漂移);凭证一律 CredentialRef,勿读 process.env。

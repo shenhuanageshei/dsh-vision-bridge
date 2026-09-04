@@ -58,6 +58,9 @@ npm run build:vendor   # tsc 出 vendor dist（改 vendor src 后）
 npm test               # node --test（零依赖；递归含 vendor 测试）
 ```
 
+> **开发环境注意**:插件的 peer 依赖（`@deepseek-ai/*`）不在公共 npm,测试解析依赖把本目录 `node_modules/@deepseek-ai/*` 以 junction 指向 web profile 的 `node_modules`（已 gitignore）。新 clone 上跑测试前需自建这些 junction,或在 DSH profile 内开发。
+  另:settings-lifecycle 测试会临时改 `process.env.DSH_HOME` 以隔离持久化目录;`node --test` 每个测试文件独立子进程,无跨文件污染。
+
 ## 引擎库来源
 
 vendor 自 [shenhuanageshei/vision-bridge](https://github.com/shenhuanageshei/vision-bridge)（快照 2026-09-04；逐文件 sha256 指纹见 `vendor/vision-bridge/VENDOR.md`）。源码逻辑零改动，仅补 `package.json`/`tsconfig.json` 并 tsc 出 `dist`；其 8 个 vitest 测试已移植为 node:test。
