@@ -1,0 +1,6 @@
+# dsh-vision-bridge bundle patch: mounts the plugin as one loader entry.
+# Runtime defaults live at the plugin's settings boundary (namespace vision-bridge).
+# Users override them with a same-id row in their profile patch (settings or config).
+- insert:
+    - id: vision-bridge
+      name: '@dsh-external/dsh-vision-bridge'
