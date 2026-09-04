@@ -19,6 +19,10 @@
 | credential | DSH CredentialRef（默认 `VISION_API_KEY`，与 toolkit 同名共享凭证条目） |
 | 其余字段 | timeoutMs / concurrency / cache / maxImageBytes / maxImagePixels / visionCapabilities / language / autoMode.maxPerTurn —— 见设计文档 §5.7 |
 
+## 已知限制
+
+- **回合取消只覆盖附件读取**：取消时 `readImageRequest`（附件字节读取）即时中止；经引擎 `analyze()` 公开 API 的 VLM HTTP 调用与重试退避**不可取消**——`AnalyzeParams` 不收 signal，包装层无法把信号传入引擎内部的 `adapter.call`（受不改库源码约束）。上游库为 analyze 增加 signal 透传后可根治。
+
 ## 安装（profile web）
 
 ```text

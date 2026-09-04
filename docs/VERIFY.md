@@ -37,7 +37,9 @@
 4. 多命中：向同一会话粘贴两张内容不同但可在占位符中同为 8-hex 前缀碰撞的图（或直接让模型用 4 位以下短前缀调用）→
    工具返回 isError，消息列出全部候选（seq/尺寸/类型），不猜测。
 5. 坏 ref：传 `ref: "hello"` → isError 且提示可用的 8-hex 列表；`ref: "00000000"` → isError 列出现有图片。
-6. 取消：工具执行期间点击停止 → 调用中止（AbortSignal 接线），无悬挂请求。
+6. 取消：工具执行期间点击停止 → **附件读取（readImageRequest）即时中止**。已知边界：经引擎
+   `analyze()` 公开 API 的 VLM HTTP 调用与重试退避**不可取消**（`AnalyzeParams` 不收 signal，包装层无法把
+   信号传入引擎内部的 adapter.call；受不改库源码约束）——上游库为 analyze 增加 signal 透传后可根治。
 
 ## 3. auto 模式：同轮注入、超时不阻塞、失败仅日志
 

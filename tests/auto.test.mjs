@@ -131,8 +131,8 @@ describe('auto mode', () => {
     assert.equal(promptContext.text({ agent: { session: session() } }), '');
   });
 
-  it('multi-message order: entering messages get their own notes in order; unrelated images pass through', async () => {
-    const { ctx, queue } = makeRuntime();
+  it('multi-message order: entering messages get their own notes in order; unrelated images pass through; injected notes stay out of PromptContext', async () => {
+    const { ctx, queue, contexts } = makeRuntime();
     ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, 'first'));
     ctx.handlers.get('session/event')(session(), imageEvent(2, ID_B, 'second'));
 
@@ -146,6 +146,27 @@ describe('auto mode', () => {
     const text = decision.messages.at(-1).content[0].text;
     assert.match(text, /note-B/);
     assert.doesNotMatch(text, /note-A/);
+
+    // ID_B was injected → claimed out of the fallback queue; ID_A was never
+    // injected → PromptContext serves exactly that one, once.
+    const later = contexts.at(-1).text({ agent: { session: session() } });
+    assert.doesNotMatch(later, /note-B/, 'injected note must not resurface via PromptContext');
+    assert.match(later, /note-A/, 'non-injected note is the PromptContext fallback\u2019s only content');
+    assert.equal(contexts.at(-1).text({ agent: { session: session() } }), '', 'fallback is consumed on first render');
+  });
+
+  it('pre-step injected note is NOT rendered again by PromptContext (no double injection in one request)', async () => {
+    const { ctx, queue, contexts } = makeRuntime();
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, 'quick'));
+    const decisionIn = { kind: 'enter', messages: [imageMessage(ID_A)] };
+    const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: decisionIn.messages, turn: 1, step: 1, signal: new AbortController().signal });
+    queue[0].resolve('same-note');
+    const decision = await decisionPromise;
+    assert.match(decision.messages.at(-1).content[0].text, /same-note/, 'in-step injection happened');
+
+    // the very same session/assembly must not see the note again
+    const promptContext = contexts.at(-1);
+    assert.equal(promptContext.text({ agent: { session: session() } }), '', 'PromptContext must stay empty after in-step injection');
   });
 
   it('synchronous registration wins the race: pre-step fired before any microtask still correlates', async () => {

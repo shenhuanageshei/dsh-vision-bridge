@@ -10,7 +10,7 @@
 | 扫描范围：user/message + tool/result、fork 全量、compaction 影子 | user/message 图 | tool/result 嵌套图 | — | resolve.test.mjs（contentHasImage 对齐/fork 前缀/compaction 影子节点保留） |
 | 验收4 resume/fork 后旧图可解析 | snapshotEvents 全量扫 | constructor seed 不发事件 → agent/created 回填 | — | auto.test.mjs（backfill 计数）；tools.test.mjs（事件数组即全量日志） |
 | 验收3 auto 同轮注入 | fast path 注入 <vision-context> | slow path 超时放行 → PromptContext 一次性兜底 | failed path 只记日志 | auto.test.mjs（fast/slow/failed/sync-registration/multi-message/maxPerTurn） |
-| 回合取消 → 在途调用中止 | pre-step 联动 abort | 已取消回合孤儿分析中止 | — | adapter-wrapper.test.mjs（fetch 级 signal 接线/退避期取消）；auto.test.mjs + tools.test.mjs（取消断言） |
+| 回合取消 → 在途调用中止（**仅附件读取**） | 附件读取中止：tool=exec.signal、auto=pre-step 联动 abort | 已取消回合孤儿分析中止 | — | auto.test.mjs + tools.test.mjs（取消断言覆盖 readImageRequest 的 signal）；adapter-wrapper.test.mjs（wrapper 自身的 fetch 级 signal 接线/退避期取消——直连调用可取消）。**已知边界**：经引擎 `analyze()` 公开 API 的 VLM HTTP 调用与重试退避**不可取消**（`AnalyzeParams` 不收 signal，包装层无法把信号传入引擎内部的 adapter.call；受不改库源码约束）——上游库为 analyze 增加 signal 透传后可根治 |
 | 超限（字节/像素/每轮条数） | readImageRequest 策略透传（maxPixels/maxBytes） | — | maxPerTurn 截断告警 | settings-lifecycle.test.mjs（policy 断言）；auto.test.mjs（maxPerTurn cap） |
 | 验收5 缓存不串答案 | 同图同问命中 | 同图异问必 miss；tool/auto 分 namespace | — | cache-backend.test.mjs（key 组成面/namespace 隔离/LRU/TTL/损坏降级）；tools.test.mjs（命中不再调 VLM） |
 | 空 VLM 响应 | — | — | 视为失败不缓存 | adapter-wrapper.test.mjs（EmptyResponseError/不重试）；tools.test.mjs（空响应 isError） |
