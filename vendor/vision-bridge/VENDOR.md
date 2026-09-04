@@ -1,6 +1,6 @@
 # Vendored: @ti-agent/vision-bridge
 
-- **来源**: `D:\workspace\vision-bridge`(本机工作副本,该目录**不是 git 仓库**,无 commit 可记)
+- **来源**: `github.com/shenhuanageshei/vision-bridge(vendor 上游,公开仓)`(本机工作副本,该目录**不是 git 仓库**,无 commit 可记)
 - **快照日期**: 2026-09-04
 - **源码逻辑零改动**: `src/**` 与原样一致;仅新增本 manifest(`package.json`/`tsconfig.json`)并由 tsc 产出 `dist/`。
 - **测试**: 原库 8 个 vitest 测试文件保留于 `tests-vitest-original/*.vitest.ts`(仅存档,不参与运行);
@@ -22,4 +22,4 @@
 | src/core/vision-bridge.ts | 24e5a585c4a79961 |
 | src/index.ts | 1801a41d19694ee2 |
 
-权威设计文档(工程上下文与运行时事实): `D:\DSH-Portable\docs\superpowers\specs\2026-09-04-dsh-vision-bridge-design.md`
+权威设计文档(工程上下文与运行时事实): `docs/design.md(本仓内快照)`

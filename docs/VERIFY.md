@@ -1,12 +1,12 @@
 # VERIFY — dsh-vision-bridge 人工验收清单（设计 §7 七条）
 
-权威依据：`D:\DSH-Portable\docs\superpowers\specs\2026-09-04-dsh-vision-bridge-design.md` §7。
+权威依据：`docs/design.md(本仓内快照)` §7。
 接线已写好但**本交付不重启 DSH web、不执行 profile pnpm install**（硬约束⑦）——以下第 0 步完成后逐条人工验证。
 
 ## 0. 安装与挂载（先决）
 
 1. ```powershell
-   cd D:\DSH-Portable\profile
+   cd <DSH_HOME>\profile
    pnpm install
    ```
    （`@dsh-external/dsh-vision-bridge` 经 `file:../../../plugins/dsh-vision-bridge` 进 profile 依赖闭包。**这一步不可省**——2026-09-05 曾因加了依赖没跑 install,启动即 `cannot resolve profile bundle` 三连崩;且 file: 依赖是复制不是链接,此后每次改 `plugins/dsh-vision-bridge/` 源码都要重跑本步(或手动同步 `profile/profiles/web/node_modules/@dsh-external/` 副本)才生效。挂载由插件自带 cordis.patch.yml 完成,**不要再往 `profile/cordis.patch.yml` 手动加同名 insert 行**(duplicate loader entry id 同样崩启动);覆盖配置走 settings.yaml 的 `vision-bridge:` 键。）

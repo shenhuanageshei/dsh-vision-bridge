@@ -2,7 +2,7 @@
   "name": "@ti-agent/vision-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "Vision bridge engine library (vendored): analyzes images with a vision-language model for text-only models. Vendored into dsh-vision-bridge; source logic unchanged from D:/workspace/vision-bridge snapshot 2026-09-04.",
+  "description": "Vision bridge engine library (vendored): analyzes images with a vision-language model for text-only models. Vendored into dsh-vision-bridge; source logic unchanged from the upstream vision-bridge snapshot 2026-09-04 (github.com/shenhuanageshei/vision-bridge).",
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
