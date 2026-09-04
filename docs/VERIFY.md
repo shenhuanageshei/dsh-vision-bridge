@@ -9,7 +9,7 @@
    cd D:\DSH-Portable\profile
    pnpm install
    ```
-   （`@dsh-external/dsh-vision-bridge` 经 `file:../../../plugins/dsh-vision-bridge` 进 profile 依赖闭包。）
+   （`@dsh-external/dsh-vision-bridge` 经 `file:../../../plugins/dsh-vision-bridge` 进 profile 依赖闭包。**这一步不可省**——2026-09-05 曾因加了依赖没跑 install,启动即 `cannot resolve profile bundle` 三连崩;且 file: 依赖是复制不是链接,此后每次改 `plugins/dsh-vision-bridge/` 源码都要重跑本步(或手动同步 `profile/profiles/web/node_modules/@dsh-external/` 副本)才生效。挂载由插件自带 cordis.patch.yml 完成,**不要再往 `profile/cordis.patch.yml` 手动加同名 insert 行**(duplicate loader entry id 同样崩启动);覆盖配置走 settings.yaml 的 `vision-bridge:` 键。）
 2. 重启 DSH web。
 3. 启动日志检查：无 `cannot get property "x" without inject`；无 `vision-bridge` 相关 error/warn（除预期的 info 行
    `vision-bridge: first run — froze provider defaults …` 或 `configuration applied live`）。
