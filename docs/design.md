@@ -83,6 +83,7 @@ vision-bridge 库现状缺 package.json/tsconfig 且 .js specifiers 无 dist,不
 ### 5.4 auto 模式(M3)
 
 - 触发:`ctx.on('session/event')` 过滤新到 `user/message` 含图;`agent/created` 时仅做诊断计数(tool 模式每次现场全量扫,无需回填索引)〔评审#14 定版〕;fork 全量继承。
+- **准入门禁约束(2026-09-05 live 定版)**:服务端 prompt 准入按会话当前模型拒带图消息(`dsh-api-session-controller/lib/index.js:751`,MODEL_DOES_NOT_SUPPORT_IMAGES)——文本-only 会话的新图**无法入账**,而多模态会话的图消息又被 auto 的模态门禁(round-3)跳过 ⇒ auto 触发条件在常规流程中不可自然发生,定位为**防御性兜底**(上游准入策略放开、或程序化注入图片的流程才会触发)。文本-only 会话的主路径是:**多模态模型下附图入账 → 切回文本-only 模型 → 提问时历史图投影为占位符 → tool 模式代读**。
 - 分析:async analyze(userRequest=当前消息归一化文本,**先清洗 DSH 占位符**再 normalize;纯图传空走库回退);超时/失败吞掉只记日志,绝不阻塞回合。
 - **同步登记在途 Promise**〔评审#3〕:监听器入口、任何 await 之前,按 `session + 事件序号` 同步登记 in-flight Promise(消除"pre-step 先于登记"竞态)。
 - 注入:`agent/pre-step` waterfall——await 该 in-flight Promise(有界超时),以 `PreStepDecision{kind:'enter', messages:[…, <vision-context> UserMessage]}` 追加,**同轮可见**;并按进入消息实际携带的 attachment id 做**相关性匹配,只注入匹配结果**;超时/失败/无匹配一律放行,由 tool 模式兜底。每条 note 标注"该解读回答的是附图当时的问题"(重放防误导)。
