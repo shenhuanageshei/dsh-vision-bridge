@@ -31,6 +31,7 @@
 ## 2. 文本-only 模型：tool 模式代读 + 多命中候选
 
 1. 用文本-only 模型开会话，粘贴截图并问"报错信息是什么？"
+   注意：web 客户端输入框暂不支持 Ctrl+V 直接粘贴图片（无该手势，与模型无关）；请用回形针附件按钮选择截图文件。
 2. 预期：模型看到占位符后调用 `vision_bridge_read`（ref=8-hex）→ 返回带
    `[UNTRUSTED EVIDENCE …]` 头的结构化描述（image_overview/visible_text/objects_and_layout/user_request_answer…）。
 3. 模型依据描述正确回答原问题。

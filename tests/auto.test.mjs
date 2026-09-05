@@ -39,9 +39,34 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-/** Scripted runtime: analysis queue of deferreds resolved by the test. */
-function makeRuntime({ mode = 'both', timeoutMs = 60000, maxPerTurn = 3 } = {}) {
+/** Scripted runtime: analysis queue of deferreds resolved by the test.
+ *
+ * Modality-gate knobs:
+ * - sessionModelInput: the input modalities llm.resolveModelInfo reports for
+ *   the session model — undefined (absent = unknown), ['text'],
+ *   ['text','image'], or 'throw' (lookup fails).
+ * - agentOptions: false simulates an agent with NO explicit model selection
+ *   (the registry lookup misses; the deployment default is consulted). */
+function makeRuntime({ mode = 'both', timeoutMs = 60000, maxPerTurn = 3, sessionModelInput, agentOptions = true } = {}) {
   const ctx = makeCtx();
+  // Modality-gate harness: agents registry + the optional llm/agentDefaultModel reads.
+  ctx.agents = {
+    get: (id) => (agentOptions ? { id, options: { provider: 'p', model: 'session-model' } } : undefined),
+  };
+  ctx.get = (name) => {
+    if (name === 'llm') {
+      return {
+        resolveModelInfo: async (provider, model) => {
+          if (sessionModelInput === 'throw') throw new Error('model lookup failed');
+          return { provider, id: model, name: model, ...(sessionModelInput === undefined ? {} : { inputModalities: sessionModelInput }) };
+        },
+      };
+    }
+    if (name === 'agentDefaultModel') {
+      return { currentSelection: () => ({ provider: 'p', model: 'default-model' }) };
+    }
+    return undefined;
+  };
   const queue = [];
   const analyzed = [];
   const lifecycle = new AbortController();
@@ -70,12 +95,19 @@ async function preStep(ctx, payload, next = async () => ({ kind: 'enter', messag
   return ctx.handlers.get('agent/pre-step')(payload, next);
 }
 
+/** One macrotask: lets the async modality gate resolve and the analysis task
+ * actually call analyzeImage. In-flight ENTRY registration stays synchronous
+ * (the design's race discipline) — only the VLM call start moved one tick. */
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
 describe('auto mode', () => {
   it('fast path: analysis settles before pre-step → same-turn injection correlated by attachment id', async () => {
     const { ctx, queue, analyzed } = makeRuntime();
     ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, '这是什么报错？'));
+    await tick();
 
-    // registration was SYNCHRONOUS: analyzeImage called before any await
+    // the in-flight entry was registered synchronously; the analysis task
+    // starts right after the (fast) modality gate
     assert.equal(analyzed.length, 1);
     assert.equal(analyzed[0].id, ID_A);
     assert.equal(analyzed[0].question, '这是什么报错？');
@@ -122,6 +154,7 @@ describe('auto mode', () => {
     const { ctx, queue, contexts, logs } = makeRuntime({ timeoutMs: 30 });
     ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A));
     const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: new AbortController().signal });
+    await tick();
     queue[0].reject(new Error('vlm down'));
     const decision = await decisionPromise;
     assert.equal(decision.messages.length, 1, 'failed analysis must not inject');
@@ -138,6 +171,7 @@ describe('auto mode', () => {
 
     const payload = { agent: { session: session() }, messages: [imageMessage(ID_B), imageMessage(ID_ORPHAN)], turn: 1, step: 1, signal: new AbortController().signal };
     const decisionPromise = preStep(ctx, payload);
+    await tick();
     queue[0].resolve('note-A');
     queue[1].resolve('note-B');
     const decision = await decisionPromise;
@@ -160,6 +194,7 @@ describe('auto mode', () => {
     ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, 'quick'));
     const decisionIn = { kind: 'enter', messages: [imageMessage(ID_A)] };
     const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: decisionIn.messages, turn: 1, step: 1, signal: new AbortController().signal });
+    await tick();
     queue[0].resolve('same-note');
     const decision = await decisionPromise;
     assert.match(decision.messages.at(-1).content[0].text, /same-note/, 'in-step injection happened');
@@ -173,8 +208,11 @@ describe('auto mode', () => {
     const { ctx, queue } = makeRuntime();
     const s = session();
     ctx.handlers.get('session/event')(s, imageEvent(1, ID_A, 'quick'));
-    // no awaits between event dispatch and pre-step — promise still pending
+    // no awaits between event dispatch and pre-step: the in-flight ENTRY is
+    // already registered synchronously, so correlation must hit even though
+    // the gated analysis call itself has not started yet
     const decisionPromise = preStep(ctx, { agent: { session: s }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: new AbortController().signal });
+    await tick();
     queue[0].resolve('sync note');
     const decision = await decisionPromise;
     assert.match(decision.messages.at(-1).content[0].text, /sync note/);
@@ -195,11 +233,13 @@ describe('auto mode', () => {
                  'sha256:cc00000000000000000000000000000000000000000000000000000000000000'];
     const content = ids.map((id) => ({ type: 'image', attachment: ref(id) }));
     ctx.handlers.get('session/event')(session(), { type: 'user/message', seq: 1, time: 1, data: { role: 'user', id: 'm1', content, source: { kind: 'user' } } });
+    await tick();
     assert.equal(analyzed.length, 2, 'cap must limit analyses per user message');
     assert.match(ctx.logs.warn.join('\n'), /maxPerTurn/);
 
     const payload = { agent: { session: session() }, messages: [{ role: 'user', id: 'm1', content, source: { kind: 'user' } }], turn: 1, step: 1, signal: new AbortController().signal };
     const decisionPromise = preStep(ctx, payload);
+    await tick();
     queue[0].resolve('note-0');
     queue[1].resolve('note-1');
     const decision = await decisionPromise;
@@ -237,6 +277,7 @@ describe('auto mode', () => {
     const s = session();
     ctx.handlers.get('session/event')(s, imageEvent(1, ID_A, '第一问'));
     ctx.handlers.get('session/event')(s, imageEvent(2, ID_A, '第二问'));
+    await tick();
     assert.equal(analyzed.length, 2, 'different questions on the same image must each analyze');
     assert.equal(queue.length, 2);
   });
@@ -246,6 +287,7 @@ describe('auto mode', () => {
     const s = session();
     ctx.handlers.get('session/event')(s, imageEvent(1, ID_A, 'same question'));
     ctx.handlers.get('session/event')(s, imageEvent(2, ID_A, 'same question'));
+    await tick();
     assert.equal(analyzed.length, 1, 'same image + same question stays deduped');
     assert.equal(queue.length, 1);
   });
@@ -265,5 +307,51 @@ describe('auto mode', () => {
     // the analysis itself was linked-aborted; nothing injected later
     await new Promise((r) => setTimeout(r, 5));
     assert.ok(queue[0] !== undefined);
+  });
+
+  it('image-capable session (model input includes image) → zero analysis, zero injection, empty PromptContext', async () => {
+    const { ctx, analyzed, queue, contexts } = makeRuntime({ sessionModelInput: ['text', 'image'] });
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, '这是什么？'));
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(analyzed.length, 0, 'a native-vision session must not be analyzed');
+
+    const decision = await preStep(ctx, { agent: { session: session() }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: new AbortController().signal });
+    assert.equal(decision.messages.length, 1, 'no vision-context injected for image-capable sessions');
+    assert.equal(contexts.at(-1).text({ agent: { session: session() } }), '', 'and nothing lands in the PromptContext fallback');
+    assert.equal(queue.length, 0, 'no analysis task was ever queued');
+  });
+
+  it('text-only session (model input is text only) → analyzes and injects normally', async () => {
+    const { ctx, analyzed, queue } = makeRuntime({ sessionModelInput: ['text'] });
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, '这是什么？'));
+    await tick();
+    assert.equal(analyzed.length, 1, 'text-only session must be analyzed');
+
+    const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: new AbortController().signal });
+    await tick();
+    queue[0].resolve('text-only note');
+    const decision = await decisionPromise;
+    assert.match(decision.messages.at(-1).content[0].text, /text-only note/);
+  });
+
+  it('unresolvable model (lookup fails) → conservative fallback analyzes', async () => {
+    const { ctx, analyzed, queue, logs } = makeRuntime({ sessionModelInput: 'throw' });
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A, 'fallback'));
+    await tick();
+    assert.equal(analyzed.length, 1, 'unknown model keeps the pre-gate behavior (analyze)');
+    const decisionPromise = preStep(ctx, { agent: { session: session() }, messages: [imageMessage(ID_A)], turn: 1, step: 1, signal: new AbortController().signal });
+    await tick();
+    queue[0].resolve('fallback note');
+    const decision = await decisionPromise;
+    assert.match(decision.messages.at(-1).content[0].text, /fallback note/);
+  });
+
+  it('agent without an explicit model falls back to the deployment default selection', async () => {
+    const { ctx, analyzed } = makeRuntime({ sessionModelInput: ['text', 'image'], agentOptions: false });
+    // agents.get misses; the default selection resolves to an image-capable
+    // model → the gate still skips the bridge.
+    ctx.handlers.get('session/event')(session(), imageEvent(1, ID_A));
+    await new Promise((r) => setTimeout(r, 5));
+    assert.equal(analyzed.length, 0, 'the default-selection path must feed the same gate');
   });
 });
