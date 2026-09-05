@@ -30,8 +30,13 @@
 
 ## 2. 文本-only 模型：tool 模式代读 + 多命中候选
 
-1. 用文本-only 模型开会话，粘贴截图并问"报错信息是什么？"
-   注意：web 客户端输入框暂不支持 Ctrl+V 直接粘贴图片（无该手势，与模型无关）；请用回形针附件按钮选择截图文件。
+1. **服务端准入规则**：当前模型不支持图像时，带图 prompt 会在服务端被拒
+   （`MODEL_DOES_NOT_SUPPORT_IMAGES`，dsh-api-session-controller:751），因此文本-only 会话**无法直接附图**。
+   正确步骤：
+   a. 把会话模型切到支持图像的模型（如 glm-5.3-flash），用回形针附件按钮附图并发送；
+   b. 把会话模型切回文本-only 模型（如 glm-5.1）；
+   c. 发送文字问题（如"刚才那张图里的报错是什么？"）——历史图投影为占位符，进入桥的 tool 模式。
+   （另：web 客户端输入框暂不支持 Ctrl+V 直接粘贴图片，与模型无关；附图一律用回形针按钮。）
 2. 预期：模型看到占位符后调用 `vision_bridge_read`（ref=8-hex）→ 返回带
    `[UNTRUSTED EVIDENCE …]` 头的结构化描述（image_overview/visible_text/objects_and_layout/user_request_answer…）。
 3. 模型依据描述正确回答原问题。
@@ -43,6 +48,10 @@
    信号传入引擎内部的 adapter.call；受不改库源码约束）——上游库为 analyze 增加 signal 透传后可根治。
 
 ## 3. auto 模式：同轮注入、超时不阻塞、失败仅日志
+
+> 定位说明：受服务端准入规则（见 §2）与 auto 模态门禁（round-3）双重约束，auto 的触发条件在常规流程中不可自然发生，
+> 现实定位为**防御性兜底**（上游准入策略放开或程序化注入图片时生效）；文本-only 会话的主路径是 §2 的 tool 模式。
+> 本节步骤用于在约束放宽后回归验证，也可用注入桩在单测层验证（tests/auto.test.mjs 已覆盖）。
 
 1. 设置页把 `vision-bridge.mode` 改为 `auto`（或保持 `both`）。
 2. 文本-only 模型会话粘贴截图 + 问题"截图里报错是什么？"。
