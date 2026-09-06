@@ -30,13 +30,10 @@
 
 ## 2. 文本-only 模型：tool 模式代读 + 多命中候选
 
-1. **服务端准入规则**：当前模型不支持图像时，带图 prompt 会在服务端被拒
-   （`MODEL_DOES_NOT_SUPPORT_IMAGES`，dsh-api-session-controller:751），因此文本-only 会话**无法直接附图**。
-   正确步骤：
-   a. 把会话模型切到支持图像的模型（如 glm-5.3-flash），用回形针附件按钮附图并发送；
-   b. 把会话模型切回文本-only 模型（如 glm-5.1）；
-   c. 发送文字问题（如"刚才那张图里的报错是什么？"）——历史图投影为占位符，进入桥的 tool 模式。
-   （另：web 客户端输入框暂不支持 Ctrl+V 直接粘贴图片，与模型无关；附图一律用回形针按钮。）
+1. 在文本-only 模型会话中，**直接 Ctrl+V 粘贴截图**（或回形针附图）并发问"报错信息是什么？"。
+   依据：本部署已对服务端准入打本地补丁（`scripts/patch-admission-gate.mjs`，带 .bak 备份）——准入不再按当前模型拒图；
+   图片照常入账，请求时由运行时投影为占位符，进入桥的 tool 模式。
+   **DSH 更新后若验收 §2 失败，先重跑该脚本再重启**（核心包更新会覆盖补丁）。
 2. 预期：模型看到占位符后调用 `vision_bridge_read`（ref=8-hex）→ 返回带
    `[UNTRUSTED EVIDENCE …]` 头的结构化描述（image_overview/visible_text/objects_and_layout/user_request_answer…）。
 3. 模型依据描述正确回答原问题。
