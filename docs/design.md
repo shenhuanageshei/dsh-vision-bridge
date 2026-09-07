@@ -271,6 +271,136 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 | 2 | 🔵 | §10.4 清单漏列 `tests/TEST-MATRIX.md`(diff 实际包含) | 已补列 |
 | 3 | 🔵 | client 静态测试为纯文本断言,弱于「断言导出形状」且对字面量重构脆弱 | 缓后:符合 §10.6「静态断言」字面约定;未来引入 client 测试基建时再升级为 stub loader 执行工厂取真实导出 |
 
+## 11. 设置卡片重设计:Provider 联动 + 凭证三形态 + 连通验证 + 环境体检(2026-09-07 增订,经用户确认)
+
+> 背景:§10 交付后用户实测提出三项可用性改进:①卡片改名「dsh-VisionBridge 视觉代读」②provider/model 从 DSH 已配置 provider 里选(手填兜底)③凭证从「猜引用名」改为「选/贴即用」。另加连通验证按钮与两项一键环境修复(准入补丁/modlens 冲突)。原型经 render_ui 三轮可视化呈现并获用户逐项确认。
+
+### 11.1 需求(三层)
+
+**总目标**:设置卡片从「懂配置的人才用得了」升级为「普通用户装完即用」:选 provider → 凭证自动就位 → 验证连通 → 环境体检一键修复 → 贴图即用,全程零命令行、零凭证知识。
+
+**功能用户故事**:
+1. 作为普通用户,我打开设置卡片,从下拉里选一个我认识的 provider(如 zai-coding-cn)→ 模型下拉只列该 provider 的 vision-capable 模型(👁 标识)→ Base URL 和凭证自动带出并验证 → 点「验证连通」看到 ✓ → 直接贴图用。
+2. 作为自定义端点用户,我切到「自定义」→ 四字段解锁手填 → 验证连通 → 保存。
+3. 作为新密钥用户,我在凭证下拉选「粘贴新 API Key…」→ 贴入密钥(如 sk-xxx)→ 保存时自动经 DSH 凭证服务创建凭证条目(默认名 VISION_API_KEY)→ 输入框清空,密钥不落本插件配置。
+4. 作为换机器用户,我打开卡片看到「环境体检」区:准入补丁 ⚠ → 点「一键修复」→ 提示需重启;modlens 冲突 ⚠ → 点「一键关闭」→ 提示需重启;两项全 ✓ 时该区折叠为一行绿色摘要。
+5. 作为用户,卡片标题显示「dsh-VisionBridge 视觉代读」,高级字段默认折叠(输出格式/超时/并发/每轮上限),首次只露出核心 5 字段。
+
+**非功能**:纯 JS createElement(client 半侧协议不变);宿主 CSS 变量做色;新 inject 清单必须加 remote/settings 读取能力(错名=静默不加载);凭证密钥永远不落 vision-bridge 命名空间(仍只存 CredentialRef 名);体检不自动执行修复(用户点按钮才执行,带后果说明);node:test 零新依赖。
+
+### 11.2 运行时事实(需新增验证的实现前提)
+
+1. **providers 只读投影**:settings.yaml `llm-pi-ai.providers.*` 含 `apiKeyEnv`/`models[].input`——服务端可直接读并投影为「provider 下拉数据源」{id, baseURL 推断, models[{id, vision-capable}]};宿主 settings-plugins 内置卡(SubagentModelSelectionCard)已有同类消费先例(refreshCatalog 读 adapter catalog)。**实现前必须核实**:provider baseURL 是否可直接从 settings.yaml 读到(zai-coding-cn 无 baseURL 字段——api base 可能由 provider 适配器内置或另有配置;若读不到则下拉项只带 apiKeyEnv+models,baseURL 仍手填/留默认)。
+2. **凭证创建 API**:宿主 dsh-credentials 支持 `credentials.create/resolve`(settings-plugins 内置 webSearch 卡经 `ctx.remote.credentials` 管理凭证——同构先例);client 半侧需注入 `@deepseek-ai/dsh-api-remotes`(含 remote.credentials 服务)。**实现前必须核实**:remote.credentials 的确切服务名与方法签名。
+3. **连通验证路由**:插件已有 `ctx.inject(['webServer'])` 能力(modlens 同构)——注册 `POST /vision-bridge/test`:body {baseURL?, model?, credential?} → 服务端 resolveConfig → resolveCredential → 发 1×1 像素图 analyze → 返回 {ok, latencyMs, error?}。**凭证解析在服务端做,密钥永不下发到 client**。
+4. **准入补丁检测**:读 `node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js` 搜补丁 marker(patch-admission-gate.mjs 写入的 `if (false)` 或注释标记);幂等重跑=复用 scripts/patch-admission-gate.mjs 的 Node API(导出函数,非仅 CLI)。
+5. **modlens 冲突检测**:①modlens 是否在已加载插件列表(服务端 ctx 插件注册表) ②`GET /modlens/paste?model=x` 是否 404(404=已禁用)。一键关闭=向 `profile/profiles/web/cordis.patch.yml` 追加/合并 `- id: modlens / config: {pasteToPath: false}` override 行(YAML 定点追加,先检查是否已有该行,幂等;写后提示重启)。
+6. **client inject 增量**:需 `@deepseek-ai/dsh-api-remotes`(remote.settings/remote.credentials)与 webServer 路由对接 → `dsh.client.inject` 增至 `['@deepseek-ai/dsh-client-ui-slots','@deepseek-ai/dsh-client-ui-settings','@deepseek-ai/dsh-client-locale','@deepseek-ai/dsh-api-remotes']`;插件对象 inject 增 `'remote'`(或具体 remote.settings/remote.credentials——以 settings-plugins 内置卡声明为准)。
+
+### 11.3 方案
+
+**A. 卡片结构(三组折叠+体检区)**:
+
+```
+dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
+纯文本模型的会话截图由视觉模型代读…
+
+┌─ ① 视觉引擎 ─────────────────────────────────┐
+│ Provider [▼ zai-coding-cn]  模型 [▼ glm-5.3-flash 👁] [验证连通]
+│ Base URL [https://api.zai…(自动带出,可改)]   凭证 [ZAI_CODING_CN_API_KEY ✓自动带出]
+│ (凭证下拉:已存凭证列表 + 「粘贴新 API Key…」 + 「输入凭证条目名…」)
+│ (选「粘贴新 API Key」展开 monospace 输入框 + 提示「保存时自动创建凭证条目,密钥不落配置」)
+└───────────────────────────────────────────────┘
+┌─ ② 触发与输出 ───────────────────────────────┐
+│ 触发模式 [▼ both]  回答语言 [▼ zh]
+│ 附加指令 [textarea…0/2000]  (修改后旧缓存自动失效)
+└───────────────────────────────────────────────┘
+▸ 高级设置(输出格式 · 超时 · 并发 · 每轮上限)
+┌─ 环境体检 [重新检测] ─────────────────────────┐
+│ ✓ 连通正常 — VLM 端点可达,凭证有效(延迟 45ms)
+│ ⚠ 准入补丁未生效 — [说明折叠] [一键修复]
+│ ⚠ modlens 粘贴冲突 — [说明折叠] [一键关闭]
+│ (全 ✓ 时:✓ 环境就绪,无需操作)
+└───────────────────────────────────────────────┘
+                                    [重置] [保存]
+```
+
+**B. Provider 联动逻辑**:
+- Provider 下拉数据:服务端投影(§11.2-1) → client 缓存;选项含每个 DSH provider + 「自定义」
+- 选中 provider → model 下拉只列该 provider 的 vision-capable 模型(input 含 image,👁 标识)+ 全部模型(文本模型标灰仍可选——供 auto 模式用户理解能力);同时自动填 baseURL(若可读)+ credential(apiKeyEnv 对应条目名)
+- 选中「自定义」→ 四字段解锁手填(紫色边框视觉区分,§10 原字段全保留)
+- 写回语义不变:保存仍是 vision-bridge 命名空间的三字段(baseURL/model/credential)——provider 选择只是**填表辅助**,不新增配置字段(避免 schema 漂移)
+
+**C. 凭证三形态**:
+- 形态 1(联动):provider 选中自动带出 apiKeyEnv 条目名,后台静默验证(resolveCredential 成功=✓)
+- 形态 2(选择):下拉列出 DSH 已存凭证条目(remote.credentials.describe),每项带来源 provider 说明
+- 形态 3(贴密钥):选「粘贴新 API Key…」→ 展开 input → 保存时客户端调 remote.credentials.create(默认名 VISION_API_KEY,或用户改)→ 成功后 credential 字段写入条目名、密钥输入框清空
+- **安全不变量**:vision-bridge 配置仍只存 CredentialRef 名;密钥经 DSH 凭证服务加密存储,不进本插件 settings、不进 client 内存持久层
+
+**D. 连通验证按钮**:
+- 位置:①视觉引擎组内,与 Base URL/模型同行
+- 行为:点击 → 按钮禁用+「⏳ 验证中…」→ POST /vision-bridge/test(当前草稿的 baseURL/model/credential;若凭证框处于「贴密钥」态则先暂存密钥待保存时建条目,验证用临时 resolve)→ 展示 ✓ 连通(模型+延迟)/ ✗ 失败(具体原因:401 凭证错/404 端点错/超时/未知)
+- 服务端 route:webServer scoped inject,注册/守卫与 modlens 同构;1×1 PNG 单次 analyze,不写缓存
+
+**E. 环境体检+一键修复**:
+- 检测(卡片挂载时自动跑一次,带 [重新检测]):
+  - 连通 = D 的结果缓存
+  - 准入补丁 = 服务端读核心包源码搜 marker(§11.2-4)
+  - modlens 冲突 = 服务端查插件注册表 + fetch /modlens/paste(§11.2-5)
+- 一键修复准入补丁:POST /vision-bridge/fix-admission → 服务端调 patch 脚本的导出函数(幂等,.bak 兜底)→ 返回 {applied, needsRestart: true} → 前端提示「已应用,重启 DSH web 后生效」
+- 一键关闭 modlens:POST /vision-bridge/fix-modlens → 服务端向 profile 层 cordis.patch.yml 幂等追加 override 行 → 返回 {applied, needsRestart} → 同上提示
+- 每项 ⚠ 附折叠的人话说明(非开发者可读),修复按钮只对 ⚠ 可见
+- 全 ✓ 时区块缩为一行「✓ 环境就绪」
+
+**F. i18n**:en/zh 双语增补(所有新标签/提示/说明文案);卡片标题 locale key `cardTitle` = 「dsh-VisionBridge 视觉代读」/ "dsh-VisionBridge Vision Read"。
+
+### 11.4 受影响文件清单
+
+| 文件 | 动作 | 职责 |
+|---|---|---|
+| `plugins/dsh-vision-bridge/lib/client.js` | 大改 | 三组折叠布局+provider 联动+凭证三形态+验证按钮+体检区 |
+| `plugins/dsh-vision-bridge/lib/server-routes.js` | 新增 | webServer scoped inject:/test /env-check /fix-admission /fix-modlens 四路由 |
+| `plugins/dsh-vision-bridge/lib/index.js` | 修改 | 挂载 server-routes;可能暴露 providers 投影 |
+| `plugins/dsh-vision-bridge/lib/config.js` | 不变 | schema 零新增(联动只是填表辅助) |
+| `plugins/dsh-vision-bridge/scripts/patch-admission-gate.mjs` | 修改 | 导出可编程调用的 applyPatch 函数(保留 CLI 入口) |
+| `plugins/dsh-vision-bridge/package.json` | 修改 | dsh.client.inject 增 @deepseek-ai/dsh-api-remotes;files 已含 lib |
+| `plugins/dsh-vision-bridge/tests/*.test.mjs` | 新增/修改 | 服务端路由单测+client 静态断言更新+provider 投影单测 |
+| `plugins/dsh-vision-bridge/tests/TEST-MATRIX.md` | 修改 | §11 映射行 |
+| `docs/VERIFY.md` | 修改 | §9 人工验收清单 |
+| 安装副本+重启 | 操作 | robocopy /MIR → 重启 DSH web → 刷新页面 |
+
+### 11.5 验收标准(映射 VERIFY §9)
+
+1. 卡片标题显示「dsh-VisionBridge 视觉代读」;三组折叠(高级默认收起);首次露出 ≤6 字段。
+2. Provider 下拉列出 DSH 已配置 providers;选中后 model 下拉只列该 provider 模型(vision-capable 带 👁);Base URL 与凭证自动带出(可改)。
+3. 选「自定义」→ 四字段解锁手填,紫色边框区分。
+4. 凭证下拉含已存条目列表 + 「粘贴新 API Key…」;贴密钥保存后自动创建凭证条目(密钥不落 vision-bridge 配置)、输入框清空、credential 字段写入条目名。
+5. 「验证连通」按钮:验证中态 → ✓(模型+延迟)/ ✗(具体原因)。
+6. 环境体检:准入补丁/modlens 冲突检测正确;一键修复后提示需重启;全 ✓ 缩为一行。
+7. 保存/重置/拒收保旧行为不回归(§10.5 1-4 全部仍过)。
+8. `node --test` 全绿(含新增用例)。
+
+### 11.6 测试矩阵增补
+
+| 验收条 | 正常 | 边界 | 错误 |
+|---|---|---|---|
+| §11.5-2 | providers 投影含 id+models(vision 标识) | 空 providers 配置 → 下拉仅「自定义」 | — |
+| §11.5-4 | 贴密钥 → remote.credentials.create 调用参数正确 | 密钥空/全空白 → 拒 | create 失败 → 显示原因,不写入 credential |
+| §11.5-5 | /test 路由返回 ok+latency | 端点 404/超时/凭证 401 → 各自 error 码 | 路径非 POST → 405 |
+| §11.5-6 | 补丁 marker 检测 true/false 正确 | 核心包路径不存在 → unknown | — |
+| §11.5-6 | modlens 检测:未安装→✓;装了+404→✓;装了+200→⚠ | patch.yml 已有 override 行 → 幂等跳过 | YAML 写失败 → error 返回 |
+| client | 静态断言:三组结构/provider 联动函数/凭证三形态控件/体检区 | — | — |
+
+### 11.7 风险登记(本章增补)
+
+| # | 级别 | 风险 | 缓解 |
+|---|---|---|---|
+| 12 | 🟠 | providers 投影读不到 baseURL(provider 适配器内置)→ 联动填不全 | 实现首步核实;读不到则该项留空+提示「手动填 Base URL」 |
+| 13 | 🟠 | remote.credentials 服务名/签名猜错 → 静默不加载或调用失败 | 以 settings-plugins 内置 webSearch 卡实测声明为准;boot 断言 |
+| 14 | 🟠 | 一键修复写 profile cordis.patch.yml 与用户手编冲突 | 幂等追加(先搜已有行);写前读全文+严格 YAML 校验;失败返回原文件不动 |
+| 15 | 🟡 | patch 脚本改 export 影响 CLI 兼容 | 保留 CLI 入口不变;导出函数单独单测 |
+| 16 | 🔵 | 体检自动跑 /test 造成多余 VLM 费用 | 体检的连通项只在用户点「验证连通」后缓存,挂载时只用上次缓存或跳过 |
+
 ## 附录 A:架构评审报告(全文)
 
 （评审 A,只读,行号实测）
