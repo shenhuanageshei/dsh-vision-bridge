@@ -404,6 +404,16 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 15 | 🟡 | patch 脚本改 export 影响 CLI 兼容 | 保留 CLI 入口不变;导出函数单独单测 |
 | 16 | 🔵 | 体检自动跑 /test 造成多余 VLM 费用 | 体检的连通项只在用户点「验证连通」后缓存,挂载时只用上次缓存或跳过 |
 
+### 11.8 交付偏差记录(2026-09-07,偏差审计定案)
+
+| # | 级别 | 偏差 | 处置 |
+|---|---|---|---|
+| 1 | 🟡 | §11.2-2 原文「宿主 dsh-credentials 支持 credentials.create/resolve」——实证宿主 remote.credentials **无 create 方法、无枚举**(dsh-api-remotes/lib/client.js:4697-4707 仅 describe(refs) 与 set(ref,value));实现改为 **describe-then-set**(先确认未配置再写入),行为契约保持:冲突=拒绝+提示改名、密钥不落配置 | 定案:接受宿主 API 硬边界;§11.3 C 形态 3 的「create」读作「经 describe 确认后 set」 |
+| 2 | 🔵 | §11.3 C 形态 2「列出 DSH 已存凭证条目」——宿主无枚举 API,实现列 providers apiKeyEnv+当前 ref+VISION_API_KEY 候集,非全部已存凭证;「输入凭证条目名…」手填兜底保底 | 已声明降级(与 #1 同根因);手填兜底闭环 |
+| 3 | 🔵 | describe-then-set 的 TOCTOU 窗口(并发同名创建时 set 无条件覆盖;宿主 set 无 if-not-exists 语义) | 单用户桌面场景实际风险极低;宿主 API 下无更优解,留档不修 |
+| 4 | 🔵 | §11.6 边界格「密钥空/全空白→拒」代码已实现但缺静态断言用例 | 缓后:随下轮测试补一条断言,不阻塞活体验收 |
+| 5 | 🔵 | push 时机:本地 ahead 3(e34f11e/1175e8c/bef4449) | 定案:活体验收(VERIFY §9)通过后统一推送(遵循 §10 先例) |
+
 ## 附录 A:架构评审报告(全文)
 
 （评审 A,只读,行号实测）
