@@ -1,7 +1,7 @@
 # VERIFY — dsh-vision-bridge 人工验收清单（设计 §7 七条）
 
-权威依据：`docs/design.md(本仓内快照)` §7。
-接线已写好但**本交付不重启 DSH web、不执行 profile pnpm install**（硬约束⑦）——以下第 0 步完成后逐条人工验证。
+权威依据：`docs/design.md` §7。
+接线已写好但**本交付不重启 DSH web、不执行 profile pnpm install**——以下第 0 步完成后逐条人工验证。
 **〔2026-09-07 §10 交付注〕**设置界面交付（design §10）已用 robocopy /MIR（排除 .git、node_modules）把含 `lib/client.js`
 与新 `package.json`（`dsh.client` 声明）的源码同步到安装副本，**但未重启 DSH web**——重启 + 浏览器硬刷新 +
 §8 活体验证由主会话执行（重启会终止运行中的会话，不在交付内完成）。
@@ -142,7 +142,7 @@
 
 > 前置:§11 交付后 robocopy 同步安装副本 → 重启 DSH web → 刷新页面。
 
-1. 卡片标题显示「**dsh-VisionBridge 视觉代读**」;三组分区(视觉引擎/触发与输出/高级折叠);首次露出 ≤6 字段。
+1. 卡片标题显示「**dsh-VisionBridge 视觉代读**」;三组分区(视觉引擎/触发与输出/高级折叠);首次露出核心 7 字段(Provider/模型/BaseURL/凭证/触发模式/回答语言/附加指令)。
 2. Provider 下拉列出 DSH 已配置 providers;选中后 model 下拉只列该 provider 模型(vision-capable 带 👁);Base URL 与凭证自动带出(可改)。
 3. 选「自定义」→ 四字段解锁手填,视觉上以边框色区分联动模式。
 4. 凭证下拉:已存条目列表(带来源说明)+「粘贴新 API Key…」;贴入密钥保存 → 凭证条目自动创建(密钥不落 vision-bridge 配置)→ 输入框清空、credential 字段变为条目名。

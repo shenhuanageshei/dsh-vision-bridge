@@ -284,7 +284,7 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 2. 作为自定义端点用户,我切到「自定义」→ 四字段解锁手填 → 验证连通 → 保存。
 3. 作为新密钥用户,我在凭证下拉选「粘贴新 API Key…」→ 贴入密钥(如 sk-xxx)→ 保存时自动经 DSH 凭证服务创建凭证条目(默认名 VISION_API_KEY)→ 输入框清空,密钥不落本插件配置。
 4. 作为换机器用户,我打开卡片看到「环境体检」区:准入补丁 ⚠ → 点「一键修复」→ 提示需重启;modlens 冲突 ⚠ → 点「一键关闭」→ 提示需重启;两项全 ✓ 时该区折叠为一行绿色摘要。
-5. 作为用户,卡片标题显示「dsh-VisionBridge 视觉代读」,高级字段默认折叠(输出格式/超时/并发/每轮上限),首次只露出核心 5 字段。
+5. 作为用户,卡片标题显示「dsh-VisionBridge 视觉代读」,高级字段默认折叠(输出格式/超时/并发/每轮上限),首次只露出核心 7 字段(Provider/模型/BaseURL/凭证/触发模式/回答语言/附加指令)。
 
 **非功能**:纯 JS createElement(client 半侧协议不变);宿主 CSS 变量做色;新 inject 清单必须加 remote/settings 读取能力(错名=静默不加载);凭证密钥永远不落 vision-bridge 命名空间(仍只存 CredentialRef 名);体检不自动执行修复(用户点按钮才执行,带后果说明);node:test 零新依赖。
 
@@ -292,9 +292,9 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 
 1. **providers 只读投影**:settings.yaml `llm-pi-ai.providers.*` 含 `apiKeyEnv`/`models[].input`——服务端可直接读并投影为「provider 下拉数据源」{id, baseURL 推断, models[{id, vision-capable}]};宿主 settings-plugins 内置卡(SubagentModelSelectionCard)已有同类消费先例(refreshCatalog 读 adapter catalog)。**实现前必须核实**:provider baseURL 是否可直接从 settings.yaml 读到(zai-coding-cn 无 baseURL 字段——api base 可能由 provider 适配器内置或另有配置;若读不到则下拉项只带 apiKeyEnv+models,baseURL 仍手填/留默认)。
 2. **凭证创建 API**:宿主 dsh-credentials 支持 `credentials.create/resolve`(settings-plugins 内置 webSearch 卡经 `ctx.remote.credentials` 管理凭证——同构先例);client 半侧需注入 `@deepseek-ai/dsh-api-remotes`(含 remote.credentials 服务)。**实现前必须核实**:remote.credentials 的确切服务名与方法签名。
-3. **连通验证路由**:插件已有 `ctx.inject(['webServer'])` 能力(modlens 同构)——注册 `POST /vision-bridge/test`:body {baseURL?, model?, credential?} → 服务端 resolveConfig → resolveCredential → 发 1×1 像素图 analyze → 返回 {ok, latencyMs, error?}。**凭证解析在服务端做,密钥永不下发到 client**。
+3. **连通验证路由**:经 scoped `ctx.inject(['webServer'])` 引入 webServer(modlens 同构,非顶层清单)——注册 `POST /vision-bridge/test`:body {baseURL?, model?, credential?, pendingApiKey?} → 服务端 resolveConfig → resolveCredential(pendingApiKey 存在时临时 resolve 该密钥,**瞬态不持久化**)→ 发 1×1 像素图 analyze → 返回 {ok, latencyMs, error?}。**凭证解析在服务端做,密钥永不下发到 client;pendingApiKey 仅驻留单次请求内存**。
 4. **准入补丁检测**:读 `node_modules/@deepseek-ai/dsh-api-session-controller/lib/index.js` 搜补丁 marker(patch-admission-gate.mjs 写入的 `if (false)` 或注释标记);幂等重跑=复用 scripts/patch-admission-gate.mjs 的 Node API(导出函数,非仅 CLI)。
-5. **modlens 冲突检测**:①modlens 是否在已加载插件列表(服务端 ctx 插件注册表) ②`GET /modlens/paste?model=x` 是否 404(404=已禁用)。一键关闭=向 `profile/profiles/web/cordis.patch.yml` 追加/合并 `- id: modlens / config: {pasteToPath: false}` override 行(YAML 定点追加,先检查是否已有该行,幂等;写后提示重启)。
+5. **modlens 冲突检测**:①modlens 是否在已加载插件列表(服务端 ctx 插件注册表) ②`GET /modlens/paste?model=x` 是否 404(404=已禁用)。一键关闭=向 `<PROFILE_PATCH>`(= `<DSH_HOME>/profiles/web/cordis.patch.yml`,路径令牌随 §5.5 的 `<DSH_HOME>` 统一)追加/合并 `- id: modlens / config: {pasteToPath: false}` override 行(YAML 定点追加,先检查是否已有该行,幂等;写后提示重启)。
 6. **client inject 增量**:需 `@deepseek-ai/dsh-api-remotes`(remote.settings/remote.credentials)与 webServer 路由对接 → `dsh.client.inject` 增至 `['@deepseek-ai/dsh-client-ui-slots','@deepseek-ai/dsh-client-ui-settings','@deepseek-ai/dsh-client-locale','@deepseek-ai/dsh-api-remotes']`;插件对象 inject 增 `'remote'`(或具体 remote.settings/remote.credentials——以 settings-plugins 内置卡声明为准)。
 
 ### 11.3 方案
@@ -334,12 +334,12 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 **C. 凭证三形态**:
 - 形态 1(联动):provider 选中自动带出 apiKeyEnv 条目名,后台静默验证(resolveCredential 成功=✓)
 - 形态 2(选择):下拉列出 DSH 已存凭证条目(remote.credentials.describe),每项带来源 provider 说明
-- 形态 3(贴密钥):选「粘贴新 API Key…」→ 展开 input → 保存时客户端调 remote.credentials.create(默认名 VISION_API_KEY,或用户改)→ 成功后 credential 字段写入条目名、密钥输入框清空
+- 形态 3(贴密钥):选「粘贴新 API Key…」→ 展开 input → 保存时客户端调 remote.credentials.create(默认名 VISION_API_KEY,或用户改)→ 成功后 credential 字段写入条目名、密钥输入框清空。**条目名冲突**:remote.credentials.create 遇已存在条目 → 拒绝(不覆盖不后缀),前端提示「条目 {name} 已存在,请改名」,用户改条目名后重试
 - **安全不变量**:vision-bridge 配置仍只存 CredentialRef 名;密钥经 DSH 凭证服务加密存储,不进本插件 settings、不进 client 内存持久层
 
 **D. 连通验证按钮**:
 - 位置:①视觉引擎组内,与 Base URL/模型同行
-- 行为:点击 → 按钮禁用+「⏳ 验证中…」→ POST /vision-bridge/test(当前草稿的 baseURL/model/credential;若凭证框处于「贴密钥」态则先暂存密钥待保存时建条目,验证用临时 resolve)→ 展示 ✓ 连通(模型+延迟)/ ✗ 失败(具体原因:401 凭证错/404 端点错/超时/未知)
+- 行为:点击 → 按钮禁用+「⏳ 验证中…」→ POST /vision-bridge/test(当前草稿的 baseURL/model/credential;若凭证框处于「贴密钥」态则附 pendingApiKey 字段走临时 resolve,密钥瞬态不持久化)→ 展示 ✓ 连通(模型+延迟)/ ✗ 失败(具体原因:401 凭证错/404 端点错/超时/未知)
 - 服务端 route:webServer scoped inject,注册/守卫与 modlens 同构;1×1 PNG 单次 analyze,不写缓存
 
 **E. 环境体检+一键修复**:
@@ -367,11 +367,13 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | `plugins/dsh-vision-bridge/tests/*.test.mjs` | 新增/修改 | 服务端路由单测+client 静态断言更新+provider 投影单测 |
 | `plugins/dsh-vision-bridge/tests/TEST-MATRIX.md` | 修改 | §11 映射行 |
 | `docs/VERIFY.md` | 修改 | §9 人工验收清单 |
+| **M0 前提核验**(实现首步) | 操作 | 核实 §11.2-1 providers baseURL 可读性与 §11.2-2 remote.credentials 签名;任一不可行 → 启动已注册降级(风险 #12/#13:baseURL 手填 / form-3 隐藏) |
 | 安装副本+重启 | 操作 | robocopy /MIR → 重启 DSH web → 刷新页面 |
+| 发布 | 操作 | commit → tag vX.Y.Z(可选)→ push origin master(勿推 local-history;仓为公开) |
 
 ### 11.5 验收标准(映射 VERIFY §9)
 
-1. 卡片标题显示「dsh-VisionBridge 视觉代读」;三组折叠(高级默认收起);首次露出 ≤6 字段。
+1. 卡片标题显示「dsh-VisionBridge 视觉代读」;三组折叠(高级默认收起);首次露出核心 7 字段(Provider/模型/BaseURL/凭证/触发模式/回答语言/附加指令)。
 2. Provider 下拉列出 DSH 已配置 providers;选中后 model 下拉只列该 provider 模型(vision-capable 带 👁);Base URL 与凭证自动带出(可改)。
 3. 选「自定义」→ 四字段解锁手填,紫色边框区分。
 4. 凭证下拉含已存条目列表 + 「粘贴新 API Key…」;贴密钥保存后自动创建凭证条目(密钥不落 vision-bridge 配置)、输入框清空、credential 字段写入条目名。
@@ -385,7 +387,8 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 验收条 | 正常 | 边界 | 错误 |
 |---|---|---|---|
 | §11.5-2 | providers 投影含 id+models(vision 标识) | 空 providers 配置 → 下拉仅「自定义」 | — |
-| §11.5-4 | 贴密钥 → remote.credentials.create 调用参数正确 | 密钥空/全空白 → 拒 | create 失败 → 显示原因,不写入 credential |
+| §11.5-3 | 自定义模式:provider 选「自定义」→ 四字段解锁手填 | — | — |
+| §11.5-4 | 贴密钥 → remote.credentials.create 调用参数正确 | 密钥空/全空白 → 拒;**条目名已存在 → 拒+提示改名** | create 失败 → 显示原因,不写入 credential |
 | §11.5-5 | /test 路由返回 ok+latency | 端点 404/超时/凭证 401 → 各自 error 码 | 路径非 POST → 405 |
 | §11.5-6 | 补丁 marker 检测 true/false 正确 | 核心包路径不存在 → unknown | — |
 | §11.5-6 | modlens 检测:未安装→✓;装了+404→✓;装了+200→⚠ | patch.yml 已有 override 行 → 幂等跳过 | YAML 写失败 → error 返回 |
