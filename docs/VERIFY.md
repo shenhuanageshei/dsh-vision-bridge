@@ -112,6 +112,19 @@
 
 ## 8. 设置界面卡片 + promptExtra(2026-09-07 增订,design §10)
 
+> **✅ 2026-09-07 活体验证通过(本节 1–6 项全部)**:重启 DSH web(15:44)+ 全新页面后,
+> 设置→插件 页出现「Vision 截图代读」卡片,10 字段当前值与 settings.yaml 逐项一致;
+> 卡片写 promptExtra「…MARKER-EXTRA」保存(落盘 settings.yaml)→ 文本-only 会话贴图提问,
+> VLM note 正确读图且**尾部带 MARKER-EXTRA**(指令即改即生效,零重启);同图同问改指令为
+> MARKER-SECOND → 显式工具调用返回**全新 note**(缓存 miss)尾部 MARKER-SECOND,旧标记
+> 不再出现;清空指令 → settings.yaml 行移除,回默认;timeoutMs=5 保存 → banner「保存被
+> 拒绝(可能是非法值);旧配置继续生效,草稿已保留。」+ 草稿保留 + 重置回 60000 +
+> settings.yaml 不变;F5 后卡片存活、值正确、零 console 错误。取证明细见主会话
+> (session-de098681,seq 3153/3212/3443/3630 证据)。附注:服务端日志无 UI 拒收行系
+> settingsScope 契约丢弃 response.error 所致(design §10.8-1 已声明,UI banner 即补偿);
+> CDP 合成键 Ctrl+V 在调试实例失灵为环境怪象(纯 data: 页同样复现),合成 ClipboardEvent
+> 全链路通过,真实键盘粘贴由用户亲测闭环。
+
 > 前置:插件源码(含 lib/client.js 与 package.json 的 dsh.client 声明)已 robocopy 同步安装副本,重启 DSH web,浏览器**硬刷新**页面(client 插件清单变化)。
 
 1. 设置 → 插件 页出现 **vision-bridge 卡片**,字段与 design §10.1 一致(provider.baseURL/model、credential、mode、language、promptExtra 多行、outputFormat、timeoutMs、concurrency、autoMode.maxPerTurn),当前值与 `settings.yaml` 一致。
