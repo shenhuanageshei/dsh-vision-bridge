@@ -153,7 +153,8 @@
 
 ## 附：自动化测试
 
-- 插件根：`node --test`（232 用例；含 vendor 引擎库 108 例、§10 promptExtra/client 静态 23 例）。
+- 插件根：`node --test`（296 用例、零失败；vendor 引擎库 108 例 + 插件层 188 例——其中 §11 增补 client 静态 16 例
+  （client-static 总 30）、服务端路由 46 例；§10 前基线 234 例）。
 - 真实调用冒烟：设置 `VISION_BRIDGE_SMOKE=1`、`VISION_BRIDGE_SMOKE_BASEURL`、`VISION_BRIDGE_SMOKE_MODEL`、
   `VISION_BRIDGE_SMOKE_KEY` 后运行 `node --test tests/smoke.test.mjs`。
 - 用例 × 验收映射：`tests/TEST-MATRIX.md`。

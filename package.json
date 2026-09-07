@@ -15,6 +15,7 @@
   },
   "files": [
     "lib",
+    "scripts",
     "vendor/vision-bridge/dist",
     "vendor/vision-bridge/src",
     "vendor/vision-bridge/VENDOR.md",
@@ -32,7 +33,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes"
       ]
     }
   },

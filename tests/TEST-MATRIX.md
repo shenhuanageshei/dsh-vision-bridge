@@ -31,4 +31,22 @@
 | §10.5-3/VERIFY§8-3 promptExtra 生效+缓存失效 | 指令拼装单测：非空 promptExtra 出现在 userRequest 尾部（zh/en 顺序锁定 question→language→extra） | 空串/纯空白归一为空，请求字节级零漂移 | — | prompt-extra.test.mjs（zh/en 顺序/三态字节一致） |
 | §10.5-4/VERIFY§8-4 非法值拒收保旧 | resolveConfig 接受 ≤2000 字符 | 恰 2000 字符；trim 归一 | >2000 拒绝抛 TypeError；非法 UTF-16 孤项拒 | prompt-extra.test.mjs（恰 2000/2001/孤高/孤低/合法代理对） |
 | 缓存指纹（§10.3） | promptExtra 变化 → configFingerprint 变化 | 缺省/空串/纯空白同指纹（含无字段 resolved 对象） | — | prompt-extra.test.mjs（fingerprint 三态一致/变化/无字段等价） |
-| client 半侧声明 | package.json `dsh.client`（platform:web + 三宿主包 inject）/`exports["./client"]`/files 覆盖 | 客户端与服务端 promptExtra 限额同步（2000）防漂移 | — | client-static.test.mjs（严格 JSON.parse 断言；MAX_PROMPT_EXTRA 跨侧同步断言） |
+| client 半侧声明 | package.json `dsh.client`（platform:web + 宿主包 inject；§10 时三包，§11 增至四含 `@deepseek-ai/dsh-api-remotes`）/`exports["./client"]`/files 覆盖 | 客户端与服务端 promptExtra 限额同步（2000）防漂移 | — | client-static.test.mjs（严格 JSON.parse 断言；MAX_PROMPT_EXTRA 跨侧同步断言；4 包 inject deepEqual） |
+
+## §11 设置卡片 v2 映射（2026-09-07 增订；活体验收=VERIFY §9）
+
+| 验收/故事 | 正常 | 边界 | 错误 | 用例（文件） |
+|---|---|---|---|---|
+| M0 前提核验（§11.2/§11.4） | M0-1 providers 投影：id+baseURL（部分 provider 可读，不可读→空串，风险#12 登记降级）+apiKeyEnv+models（vision 标识） | 空配置/抛错配置 → `[]`（卡片仅剩「自定义」）；坏行/坏模型过滤 | — | server-routes.test.mjs（projectProviders 4 例：投影/无 baseURL/坏行/空配置） |
+| M0-2 凭证 API 核验 | credentialCandidateRefs：provider apiKeyEnv+当前 ref+VISION_API_KEY 去重保序 | 无 config → 仅 envs+默认 | — | server-routes.test.mjs（refs 2 例）。**注**：核实发现 remote.credentials 无 create/枚举 API，§11.3C「create+碰撞拒绝」按 M0-2 备案落地为 describe-then-set（client 侧）——create 调用参数/碰撞拒绝断言见 client-static.test.mjs（set(entry,key)/conflict 拒绝/仅条目名入 staged） |
+| M0-3 webServer 路由同构 | 四 exact 路由注册，disposer 全数移除（fiber 重跑不漏重复注册） | — | 无 webServer/register 非函数 → 抛错 | server-routes.test.mjs（mounting 2 例） |
+| §11.5-1 卡片标题+三组+核心 7 字段 | cardTitle 双语「dsh-VisionBridge 视觉代读」；三组（engineGroup/triggerGroup/advancedGroup）；高级默认折叠；7 核心字段（provider/model/baseURL/credential/mode/language/promptExtra） | 折叠开关翻转（advancedOpen） | — | client-static.test.mjs（§11 v2 card structure 6 例） |
+| §11.5-2 Provider 下拉+联动 | selectProvider/syncProviderMode/linkedProviderFromBaseURL；选中自动带出 model（首个 vision）+baseURL+credential（apiKeyEnv） | vision 模型 👁 标识；无 baseURL provider → 留空+手填提示 | — | client-static.test.mjs（联动函数/自动带出/👁 3 例）+server-routes.test.mjs（providers 投影，见 M0-1 行） |
+| §11.5-3 自定义模式 | CUSTOM `__custom` 哨兵；data-custom 紫边框视觉区分 | — | — | client-static.test.mjs（custom 哨兵+data-custom 断言） |
+| §11.5-4 凭证三形态 | 下拉+`__paste`/`__manual` 哨兵；贴密钥保存=describe-then-set（密钥不落配置，仅条目名入 staged） | describe 已 configured → conflict 拒绝（不覆盖，提示改名） | 服务不可用/写入失败 → 失败提示不写 credential | client-static.test.mjs（三形态 4 例：哨兵/三控制器/describe-then-set+conflict/describe） |
+| §11.5-5 验证连通 | POST /test → ok+latencyMs（确定性时钟 25ms）+model 回显；恰一次 round trip | pendingApiKey 瞬态：resolver 零调用、Authorization 单次携带、响应不回显密钥 | 非 POST → 405；401/403→auth；404→endpoint；Abort/timeout→timeout；凭证解析失败→auth(200)；坏 baseURL→400；classifyTestFailure 单测（auth/endpoint/timeout/unknown） | server-routes.test.mjs（/test 8 例+classify 4 例） |
+| §11.5-6 补丁 marker 检测 | detect true（两文件带 marker→ok） | detect false（可读无 marker→missing） | 路径不存在→unknown | server-routes.test.mjs（detect 直测 3 例+env 路由 ok/missing/unknown 3 例） |
+| §11.5-6 一键修复准入 | POST /fix-admission → applied+needsRestart；.bak 备份保留原文；盘上含 marker | 幂等：二次调用全 skipped→alreadyPatched | — | server-routes.test.mjs（fix-admission 3 例，mkdtemp node_modules） |
+| §11.5-6 modlens 检测 | 未安装+404→✓（无冲突） | 装了+404→✓；探测抛错→unknown 无冲突；config 源失败→env 仍 200 | 装了+200→conflict ⚠ | server-routes.test.mjs（env modlens 4 例） |
+| §11.5-6 一键关闭 modlens | POST /fix-modlens → 追加 override 行、原行保留、applied+needsRestart | 幂等：二次调用字节级不变→alreadyPatched；已有手写 override 行→跳过 | 非列表文档（列 0 映射键）→500 原文不动（风险#14）；不可读→500；路径未配置→500；非 POST→405 | server-routes.test.mjs（fix-modlens 7 例，mkdtemp 临时 cordis.patch.yml，绝不触碰真实 `<PROFILE_PATCH>`） |
+| client 静态断言（§11.6 client 行） | 三组结构/provider 联动函数/凭证三形态控件/体检区（envGroup/refreshEnv/runFix/说明折叠/全✓折叠）/pendingApiKey 调用/卡标题 cardTitle | — | — | client-static.test.mjs（§11 三 describe 15 例+manifest 4 包断言） |
