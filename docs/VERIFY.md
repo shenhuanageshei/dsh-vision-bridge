@@ -118,8 +118,9 @@
 2. UI 改 `provider.model` 保存 → 无重启,下一次 `vision_bridge_read` 用新模型(日志可见,缓存 miss)。
 3. promptExtra 写「回答末尾附一行 MARKER-EXTRA」保存 → 文本-only 会话贴图提问,代读输出含该标记;
    同图同问改指令再问 → 不命中旧缓存(新答案);清空指令 → 输出回默认。
-4. 非法值(timeoutMs=5 / promptExtra>2000 字)保存 → 卡片显示错误原因,旧配置生效,
-   日志出现 keeping the previous configuration。
+4. 非法值(timeoutMs=5)保存 → 卡片显示**保存失败提示**(具体原因不回传,系 settingsScope 公开契约边界,
+   见 design §10.8;原因看服务端日志 keeping the previous configuration 行),旧配置生效;
+   promptExtra>2000 由客户端预拦截(保存禁用+红字提示)。
 5. client 半侧加载零 console 错误;F5 后卡片仍在;profile cordis.patch.yml 临时加
    `disabled: true` → 卡片消失且设置页不崩(撤销恢复)。
 6. 插件根 `node --test` 全绿(含 promptExtra 新用例)。

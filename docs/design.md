@@ -218,7 +218,7 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 - `window.__ModuleLoader__.load` 工厂,`require("react")`,React.createElement 手写控件(无构建步骤)。
 - **inject/装载清单**〔依 §10.2 实测先例;错名 = 静默不加载,§2-9〕:package.json `dsh.client = {platform:'web', inject:['@deepseek-ai/dsh-client-ui-slots','@deepseek-ai/dsh-client-ui-settings','@deepseek-ai/dsh-client-locale']}`;返回插件对象 `inject:['slots','settingsScope','locale']`(服务名分别依 effort-switcher 的 `'slots'`、settings-plugins 的 `ctx.settingsScope`、toolkit 的 `ctx.locale` 三例实测)。实现首步断言:重启后 console 零 `cannot get property "x" without inject`,且卡片槽位实际出现在 Plugins 页。
 - 注册 `settings.plugin.item` 卡片,key=`vision-bridge`;表单字段=§10.1 故事 1 全集,promptExtra 用 `<textarea>` 多行(带 2000 字符计数提示)。
-- 交互:进入卡片加载当前值 → 本地草稿编辑 → 「保存」原子 `scope.mutate(ops)` → 服务端 validate;失败显示错误并保留草稿,成功后刷新为生效值;「重置」放弃草稿回当前生效值。空 baseURL/model 输入框 placeholder 提示「留空=使用首运行固化默认」。credential 为纯文本输入(CredentialRef 名),不做密码框(名非密钥)。
+- 交互:进入卡片加载当前值 → 本地草稿编辑 → 「保存」原子 `scope.mutate(ops)` → 服务端 validate;失败显示**保存失败提示并保留草稿**(公开 settingsScope 契约被拒时不回传具体原因——与宿主内置卡同构,具体原因见服务端日志 keeping previous 行〔§10.8 偏差记录〕),成功后刷新为生效值;「重置」放弃草稿回当前生效值。空 baseURL/model 输入框 placeholder 提示「留空=使用首运行固化默认」。credential 为纯文本输入(CredentialRef 名),不做密码框(名非密钥)。
 - i18n:`ctx.locale.register('vision-bridge-ui', {en, zh})`;样式沿用宿主 CSS 变量(--dsw-alias-*),内嵌最小 css(参照 effort-switcher)。
 - 失效面:插件 disabled 行 warn-skip 时命名空间不 served → 卡片自动不渲染(两账本交集语义),无需额外处理。
 
@@ -231,6 +231,7 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 | `plugins/dsh-vision-bridge/lib/client.js` | 新增 | 设置卡片(纯 JS module-loader 工厂) |
 | `plugins/dsh-vision-bridge/package.json` | 修改 | `dsh.client` 声明 + `exports["./client"]` + files 增 lib/client.js |
 | `plugins/dsh-vision-bridge/tests/*.test.mjs` | 修改/新增 | promptExtra 用例(schema 默认空/校验拒超长/指纹参与/拼装单测/auto 路径同拼装) |
+| `plugins/dsh-vision-bridge/tests/TEST-MATRIX.md` | 修改 | §10 用例映射行(交付补列) |
 | `docs/design.md` | 修改 | §5.7 勘误 + 本章节 |
 | `docs/VERIFY.md` | 修改 | 新增 §8 设置界面人工验收清单 |
 | 安装副本 + 重启 | 操作 | robocopy /MIR(排除 .git node_modules)→ 重启 DSH web → 刷新页面(client 清单变化) |
@@ -240,7 +241,7 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 1. 设置→插件 页出现 vision-bridge 卡片,字段齐全,当前值与 settings.yaml/生效日志一致;
 2. UI 改 provider.model → 无重启,下一次 vision_bridge_read 走新模型(缓存 miss);
 3. promptExtra 写「回答末尾附一行 MARKER-EXTRA」→ 代读输出含该标记;同图同问改指令后不命中旧缓存;清空后输出回默认;
-4. 非法值(timeoutMs=5 / promptExtra>2000 字)保存被拒,卡片显示错误原因,旧配置生效(日志 keeping previous);
+4. 非法值(timeoutMs=5)保存被拒,卡片显示保存失败提示(原因不回传是 settingsScope 公开契约边界,见服务端日志 keeping previous),旧配置生效;promptExtra>2000 由客户端预拦截(禁存+提示),服务端拒绝路径保留(settings.yaml 直改可触发);
 5. client 半侧加载零 console 错误;刷新页面卡片仍在;插件 disabled 时卡片消失且页面不崩;
 6. `node --test` 全绿(含新增 promptExtra 用例)。
 
@@ -261,6 +262,14 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 | 9 | 🟠 | client 服务名(inject 数组)猜错 → 插件静默不加载 | 以 effort-switcher/toolkit 实测声明为准;boot 后 console 无 "cannot get property" 即通过 |
 | 10 | 🟡 | 纯 JS 手写 React 控件可维护性 | 字段控件极简(input/select/textarea + label),无复杂状态;样式靠宿主变量 |
 | 11 | 🔵 | promptExtra 与 language 指令顺序耦合 | 固定顺序 language→promptExtra 并单测锁定 |
+
+### 10.8 交付偏差记录(2026-09-07,偏差审计定案)
+
+| # | 级别 | 偏差 | 处置 |
+|---|---|---|---|
+| 1 | 🟡 | §10.5-4 原文承诺「卡片显示错误原因」——公开 `settingsScope.mutate` 被拒时不抛错、不回传原因(`dsh-client-ui-settings/lib/client.js:1046-1049` 丢弃 response.error),宿主内置卡同构仅显示通用失败提示;交付照宿主同构实现但未先行修订设计措辞 | 定案:接受宿主契约边界,§10.3 B 与 §10.5-4 措辞已改为「保存失败提示 + 日志取因」;不为此越出 settingsScope 公开契约 |
+| 2 | 🔵 | §10.4 清单漏列 `tests/TEST-MATRIX.md`(diff 实际包含) | 已补列 |
+| 3 | 🔵 | client 静态测试为纯文本断言,弱于「断言导出形状」且对字面量重构脆弱 | 缓后:符合 §10.6「静态断言」字面约定;未来引入 client 测试基建时再升级为 stub loader 执行工厂取真实导出 |
 
 ## 附录 A:架构评审报告(全文)
 
