@@ -37,7 +37,7 @@ DeepSeek Harness(DSH)web GUI 里,任何模型的会话都能 Ctrl+V 粘贴截图
 5. 全量 node --test:209 pass / 0 fail。
 
 ### 根因定性(用户标签页为何全静默)
-- 用户 GUI 标签页跨多日未硬刷新(9/3 20:54 客户端包 dsh-client-ui-conversation 更新、9/5-9/7 多次服务端重启/插件更新),页内运行的是陈旧 JS + 可能楔死的输入机状态;其失败期间会话日志零新增(粘贴未达服务端)与"客户端本地静默"一致。**修复动作 = 刷新 GUI 页面(F5)**。
+- 用户 GUI 标签页跨多日未硬刷新(9/3 20:54 客户端包 dsh-client-ui-conversation 更新、9/5-9/7 多次服务端重启/插件更新),页内运行的是陈旧 JS + 可能楔死的输入机状态;其失败期间会话日志零新增(粘贴未达服务端)与"客户端本地静默"一致。**修复动作 = 刷新 GUI 页面(F5)**。若刷新后个别会话粘贴仍无响应,先检查输入框是否滞留 3 张旧缩略图(maxImagesPerMessage 上限),点 × 清掉再贴。
 - 取证中发现两个上游客户端静默分支(非本插件范围,已记录,不改核心包):
   - `shell.addImages` 在 input.phase=adjudicating/submitting 时返回 false,包装层静默 releaseDraftImages 且 return null,无任何 toast(client.js:11645-11651 + 16214-16223);
   - `maxImagesPerMessage=3` 超限时仅弹约 3s 的 toast,图片静默不入账(client.js:15434);草稿按会话持久化,滞留 3 张旧图后新贴图全部"看似无响应"。
