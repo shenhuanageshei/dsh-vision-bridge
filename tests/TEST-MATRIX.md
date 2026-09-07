@@ -26,9 +26,9 @@
 
 | 验收/故事 | 正常 | 边界 | 错误 | 用例（文件） |
 |---|---|---|---|---|
-| §10.5-1/VERIFY§8-1 卡片出现+字段齐全 | 槽位注册（settings.plugin.item + key=vision-bridge）/10 字段全集/嵌套路径声明（静态断言） | 加载态与只读态渲染分支 | — | client-static.test.mjs（loader 协议/id/inject 清单/无 JSX/模块加载零副作用/字段全集） |
+| §10.5-1/VERIFY§8-1 卡片出现+字段齐全 | 槽位注册（settings.plugin.item + key=vision-bridge）/10 字段全集/嵌套路径声明（静态断言） | 加载态与只读态渲染分支（静态断言 t("loading")/t("readOnly")） | — | client-static.test.mjs（loader 协议/id/inject 清单/无 JSX/模块加载零副作用/字段全集/加载与只读分支） |
 | §10.5-2/VERIFY§8-2 UI 改 provider 即时生效 | 设置写入走 settingsScope 原子 mutate；live 链路=§5.7 既有 watch | — | — | client-static.test.mjs（bind+mutate 断言）；settings-lifecycle.test.mjs（watch 重建/live gate）；活体=VERIFY §8-2 |
 | §10.5-3/VERIFY§8-3 promptExtra 生效+缓存失效 | 指令拼装单测：非空 promptExtra 出现在 userRequest 尾部（zh/en 顺序锁定 question→language→extra） | 空串/纯空白归一为空，请求字节级零漂移 | — | prompt-extra.test.mjs（zh/en 顺序/三态字节一致） |
 | §10.5-4/VERIFY§8-4 非法值拒收保旧 | resolveConfig 接受 ≤2000 字符 | 恰 2000 字符；trim 归一 | >2000 拒绝抛 TypeError；非法 UTF-16 孤项拒 | prompt-extra.test.mjs（恰 2000/2001/孤高/孤低/合法代理对） |
 | 缓存指纹（§10.3） | promptExtra 变化 → configFingerprint 变化 | 缺省/空串/纯空白同指纹（含无字段 resolved 对象） | — | prompt-extra.test.mjs（fingerprint 三态一致/变化/无字段等价） |
-| client 半侧声明 | package.json `dsh.client`（platform:web + 三宿主包 inject）/`exports["./client"]`/files 覆盖 | — | — | client-static.test.mjs（严格 JSON.parse 断言） |
+| client 半侧声明 | package.json `dsh.client`（platform:web + 三宿主包 inject）/`exports["./client"]`/files 覆盖 | 客户端与服务端 promptExtra 限额同步（2000）防漂移 | — | client-static.test.mjs（严格 JSON.parse 断言；MAX_PROMPT_EXTRA 跨侧同步断言） |

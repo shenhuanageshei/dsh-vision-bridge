@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { MAX_PROMPT_EXTRA_CHARS } from '../lib/config.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -72,6 +73,17 @@ describe('lib/client.js — module-loader factory shape', () => {
     }
     assert.ok(clientSrc.includes('kind: "textarea"'), 'promptExtra uses a multiline textarea');
     assert.ok(clientSrc.includes('/2000'), 'character counter present');
+  });
+
+  it('renders the loading and read-only branches', () => {
+    assert.ok(clientSrc.includes('t("loading")'), 'loading branch is rendered');
+    assert.ok(clientSrc.includes('t("readOnly")'), 'read-only branch is rendered');
+  });
+
+  it('keeps the client draft limit in sync with the server bound', () => {
+    const match = clientSrc.match(/MAX_PROMPT_EXTRA\s*=\s*(\d+)/);
+    assert.ok(match, 'client MAX_PROMPT_EXTRA constant must exist');
+    assert.equal(Number(match[1]), MAX_PROMPT_EXTRA_CHARS, 'client and server promptExtra limits must match');
   });
 });
 

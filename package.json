@@ -15,7 +15,6 @@
   },
   "files": [
     "lib",
-    "lib/client.js",
     "vendor/vision-bridge/dist",
     "vendor/vision-bridge/src",
     "vendor/vision-bridge/VENDOR.md",
