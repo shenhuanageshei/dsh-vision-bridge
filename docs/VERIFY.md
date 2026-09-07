@@ -30,6 +30,15 @@
 
 ## 2. 文本-only 模型：tool 模式代读 + 多命中候选
 
+> **✅ 2026-09-07 活体验证通过(本节 1–3 项)**：全新 CDP 浏览器页面(文本-only 模型 glm-5.3)：
+> 合成粘贴与真实键盘 Ctrl+V+OS 剪贴板位图均出缩略图;粘贴 120×60 PNG 后
+> user/message seq7 真实入账 image block(sha256:53c42ca9…);模型 reasoning 引用
+> "image was omitted because this model accepts text only" 占位符;显式调用
+> vision_bridge_read{ref:"53c42ca9"}(seq1491)返回带 [UNTRUSTED EVIDENCE…] 头的
+> 结构化描述并正确读出图中文字(seq1492);auto 模式同轮 vision-context 注入在首轮
+> 亦生效;glm-5.1 下粘贴同样成功。取证细节与"用户旧标签页需硬刷新"结论见
+> `HANDOFF.md`。4–6 项(多命中/坏 ref/取消)由单测覆盖(tests/TEST-MATRIX.md)。
+
 1. 在文本-only 模型会话中，**直接 Ctrl+V 粘贴截图**（或回形针附图）并发问"报错信息是什么？"。
    依据：本部署已对服务端准入打本地补丁（`scripts/patch-admission-gate.mjs`，带 .bak 备份）——准入不再按当前模型拒图；
    图片照常入账，请求时由运行时投影为占位符，进入桥的 tool 模式。
