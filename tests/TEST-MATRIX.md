@@ -49,4 +49,4 @@
 | §11.5-6 一键修复准入 | POST /fix-admission → applied+needsRestart；.bak 备份保留原文；盘上含 marker | 幂等：二次调用全 skipped→alreadyPatched | — | server-routes.test.mjs（fix-admission 3 例，mkdtemp node_modules） |
 | §11.5-6 modlens 检测 | 未安装+404→✓（无冲突） | 装了+404→✓；探测抛错→unknown 无冲突；config 源失败→env 仍 200 | 装了+200→conflict ⚠ | server-routes.test.mjs（env modlens 4 例） |
 | §11.5-6 一键关闭 modlens | POST /fix-modlens → 追加 override 行、原行保留、applied+needsRestart | 幂等：二次调用字节级不变→alreadyPatched；已有手写 override 行→跳过 | 非列表文档（列 0 映射键）→500 原文不动（风险#14）；不可读→500；路径未配置→500；非 POST→405 | server-routes.test.mjs（fix-modlens 7 例，mkdtemp 临时 cordis.patch.yml，绝不触碰真实 `<PROFILE_PATCH>`） |
-| client 静态断言（§11.6 client 行） | 三组结构/provider 联动函数/凭证三形态控件/体检区（envGroup/refreshEnv/runFix/说明折叠/全✓折叠）/pendingApiKey 调用/卡标题 cardTitle | — | — | client-static.test.mjs（§11 三 describe 15 例+manifest 4 包断言） |
+| client 静态断言（§11.6 client 行） | 三组结构/provider 联动函数/凭证三形态控件/体检区（envGroup/refreshEnv/runFix/说明折叠/全✓折叠）/pendingApiKey 调用/卡标题 cardTitle | — | — | client-static.test.mjs（§11 三 describe 16 例+manifest 4 包断言） |

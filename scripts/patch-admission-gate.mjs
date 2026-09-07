@@ -17,11 +17,20 @@
  *   POST /vision-bridge/fix-admission route. The CLI is detected through
  *   argv[1] so importing the module for the API never runs the CLI body.
  */
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-const DEFAULT_NM = 'D:/DSH-Portable/profile/profiles/web/node_modules';
+// Derive the default from DSH_HOME when available (review #7: a public repo
+// must not hardcode one contributor's local checkout). Falls back to the
+// legacy portable path when the env is unset.
+const DEFAULT_NM = (() => {
+  const dshHome = process.env.DSH_HOME;
+  if (typeof dshHome === 'string' && dshHome.trim() !== '') {
+    return dshHome.replace(/[\\/]+$/, '').replaceAll('\\', '/') + '/profiles/web/node_modules';
+  }
+  return 'D:/DSH-Portable/profile/profiles/web/node_modules';
+})();
 const MARK = '/* [vision-bridge local patch] admission image gate disabled: text-only sessions accept screenshots; the runtime projects them to placeholders and dsh-vision-bridge handles VLM reading. Re-apply after DSH updates: node scripts/patch-admission-gate.mjs */';
 const COND_A = 'model.inputModalities !== void 0 && !model.inputModalities.includes("image")';
 const COND_B = "model.inputModalities !== undefined && !model.inputModalities.includes('image')";
@@ -120,7 +129,12 @@ function runCli() {
 }
 
 // Run as CLI only when this file is the executed entry point.
+// Windows drive-case and separator variance would make a strict equality
+// silently no-op the CLI (review #8), so compare resolved real paths.
+function realpathSafe(p) {
+  try { return realpathSync(p); } catch { return resolve(p); }
+}
 const invoked = process.argv[1] !== undefined
-  ? fileURLToPath(import.meta.url) === resolve(process.argv[1])
+  ? realpathSafe(fileURLToPath(import.meta.url)) === realpathSafe(process.argv[1])
   : false;
 if (invoked) runCli();
