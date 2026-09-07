@@ -7,11 +7,12 @@ import { MAX_PROMPT_EXTRA_CHARS } from '../lib/config.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Static shape assertions for the browser half (design §10.3B/§10.6 "client"):
-// node --test cannot mount a browser, so the loader protocol, slot
-// registration, inject declaration, and no-JSX/no-build constraints are
-// asserted against the file text, and the package manifest against strict
-// JSON.parse.
+// Static shape assertions for the browser half (design §10.3B/§10.6 and the
+// §11 v2 card): node --test cannot mount a browser, so the loader protocol,
+// slot registration, inject declarations, no-JSX/no-build constraints, and
+// the §11 v2 structure (three groups, provider linkage, credential
+// three-forms, connectivity probe, environment panel) are asserted against
+// the file text, and the package manifest against strict JSON.parse.
 
 const clientSrc = readFileSync(path.join(root, 'lib', 'client.js'), 'utf8');
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -29,8 +30,12 @@ describe('lib/client.js — module-loader factory shape', () => {
     assert.ok(clientSrc.includes('react.createElement'));
   });
 
-  it('declares the client service inject list', () => {
-    assert.ok(clientSrc.includes('["slots", "settingsScope", "locale"]'));
+  it('declares the client service inject list (§11: remote + remote.credentials added)', () => {
+    // §11.2-6: the card needs remote.settings/remote.credentials through the
+    // `remote` seam — five service names on the plugin object (M0-2: the
+    // settings-plugins built-in card precedent declares exactly remote +
+    // remote.credentials).
+    assert.ok(clientSrc.includes('["slots", "settingsScope", "locale", "remote", "remote.credentials"]'));
     assert.ok(clientSrc.includes('exports.inject = inject;'));
     assert.ok(clientSrc.includes('exports.apply = apply;'));
     assert.ok(clientSrc.includes('exports.name = name;'));
@@ -46,7 +51,7 @@ describe('lib/client.js — module-loader factory shape', () => {
 
   it('binds the settings scope and saves through one atomic mutate', () => {
     assert.ok(clientSrc.includes('ctx.settingsScope.bind({ namespace: SETTINGS_NS })'));
-    assert.ok(clientSrc.includes('this.scope.mutate(ops)'));
+    assert.ok(clientSrc.includes('await this.scope.mutate(plan.ops);'));
   });
 
   it('registers the bilingual locale dictionary', () => {
@@ -87,17 +92,143 @@ describe('lib/client.js — module-loader factory shape', () => {
   });
 });
 
+describe('lib/client.js — §11 v2 card structure', () => {
+  it('titles the card "dsh-VisionBridge 视觉代读" in both locales (§11.3F)', () => {
+    assert.ok(clientSrc.includes('cardTitle: "dsh-VisionBridge Vision Read"'));
+    assert.ok(clientSrc.includes('cardTitle: "dsh-VisionBridge 视觉代读"'));
+    assert.ok(clientSrc.includes('t("cardTitle")'), 'the card header renders the cardTitle key');
+  });
+
+  it('renders the three groups: engine / trigger & output / advanced (§11.3A)', () => {
+    assert.ok(clientSrc.includes('function engineGroup()'));
+    assert.ok(clientSrc.includes('function triggerGroup()'));
+    assert.ok(clientSrc.includes('function advancedGroup()'));
+    assert.ok(clientSrc.includes('groupEngine: "Vision engine"'));
+    assert.ok(clientSrc.includes('groupEngine: "视觉引擎"'));
+    assert.ok(clientSrc.includes('groupTrigger: "Trigger and output"'));
+    assert.ok(clientSrc.includes('groupTrigger: "触发与输出"'));
+    assert.ok(clientSrc.includes('groupAdvanced: "Advanced (output format · timeout · concurrency · per-turn cap)"'));
+    assert.ok(clientSrc.includes('groupAdvanced: "高级设置（输出格式 · 超时 · 并发 · 每轮上限）"'));
+  });
+
+  it('collapses the advanced group by default; the toggle flips it (§11.1 story 5)', () => {
+    assert.ok(clientSrc.includes('this.advancedOpen = false;'), 'advanced starts collapsed');
+    assert.ok(clientSrc.includes('state.advancedOpen ? e("div"'), 'fields render only when open');
+    assert.ok(clientSrc.includes('toggleAdvanced()'));
+  });
+
+  it('shows the first-seven core fields: provider/model/baseURL/credential/mode/language/promptExtra (§11.1 story 5)', () => {
+    assert.ok(clientSrc.includes('id: inputId("provider")'), 'provider dropdown control');
+    for (const id of ['model', 'baseURL', 'credential', 'mode', 'language', 'promptExtra']) {
+      assert.ok(clientSrc.includes(`id: "${id}"`), `field ${id} must be declared`);
+    }
+  });
+
+  it('carries the provider linkage functions and the custom sentinel (§11.3B)', () => {
+    assert.ok(clientSrc.includes('const CUSTOM_PROVIDER = "__custom";'));
+    assert.ok(clientSrc.includes('selectProvider(id)'));
+    assert.ok(clientSrc.includes('syncProviderMode()'));
+    assert.ok(clientSrc.includes('linkedProviderFromBaseURL()'));
+    // custom mode unlocks manual entry with the purple-border visual distinction
+    assert.ok(clientSrc.includes('"data-custom": state.providerMode === CUSTOM_PROVIDER ? "true" : undefined'));
+    assert.ok(clientSrc.includes('.dvb-group-engine[data-custom="true"]'));
+  });
+
+  it('auto-fills model/BaseURL/credential from the selected provider (§11.3B)', () => {
+    assert.ok(clientSrc.includes('this.staged.set("baseURL", provider.baseURL)'));
+    assert.ok(clientSrc.includes('this.staged.set("credential", provider.apiKeyEnv)'));
+    assert.ok(clientSrc.includes('provider.models.find((m) => m.vision)'));
+  });
+
+  it('marks vision-capable models with the 👁 glyph in the model options (§11.1 story 1)', () => {
+    assert.ok(clientSrc.includes('m.id + " 👁"'));
+  });
+});
+
+describe('lib/client.js — §11 credential three-forms', () => {
+  it('declares the paste and manual sentinel options next to the entry list', () => {
+    assert.ok(clientSrc.includes('const PASTE_CREDENTIAL = "__paste";'));
+    assert.ok(clientSrc.includes('const MANUAL_CREDENTIAL = "__manual";'));
+    assert.ok(clientSrc.includes('t("credentialPasteOption")'));
+    assert.ok(clientSrc.includes('t("credentialManualOption")'));
+  });
+
+  it('carries the three form controllers (select / paste key+name / manual)', () => {
+    assert.ok(clientSrc.includes('selectCredential(value)'));
+    assert.ok(clientSrc.includes('editPendingKey(text)'));
+    assert.ok(clientSrc.includes('editPendingName(text)'));
+    assert.ok(clientSrc.includes('this.credentialMode = "paste"'));
+    assert.ok(clientSrc.includes('this.credentialMode = "manual"'));
+  });
+
+  it('saves a pasted key as describe-then-set with conflict refusal (§11.3C form 3)', () => {
+    assert.ok(clientSrc.includes('await service.set(entry, key)'), 'the key goes to the DSH credential service');
+    assert.ok(clientSrc.includes('this.credentialError = { kind: "conflict", name: entry }'), 'an existing entry refuses without overwriting');
+    assert.ok(clientSrc.includes('this.staged.set("credential", entry)'), 'only the entry NAME is staged into settings');
+  });
+
+  it('describes credential candidates through remote.credentials (§11.3C form 1/2)', () => {
+    assert.ok(clientSrc.includes('await service.describe(refs)'));
+    assert.ok(clientSrc.includes('this.credentialViews'));
+  });
+});
+
+describe('lib/client.js — §11 connectivity probe and environment panel', () => {
+  it('probes through POST /vision-bridge/test with a transient pendingApiKey (§11.3D)', () => {
+    assert.ok(clientSrc.includes('async runTest()'));
+    assert.ok(clientSrc.includes('fetch("/vision-bridge/test"'));
+    assert.ok(clientSrc.includes('body.pendingApiKey = key'), 'a pasted key rides the probe request only');
+    assert.ok(clientSrc.includes('t("testConnection")'));
+    assert.ok(clientSrc.includes('t("testing")'), 'testing state shown while in flight');
+    assert.ok(clientSrc.includes('state.test.status === "testing"'));
+  });
+
+  it('renders the environment check panel with a re-check control (§11.3E)', () => {
+    assert.ok(clientSrc.includes('function envGroup()'));
+    assert.ok(clientSrc.includes('async refreshEnv()'));
+    assert.ok(clientSrc.includes('fetch("/vision-bridge/env")'));
+    assert.ok(clientSrc.includes('t("envRecheck")'));
+    assert.ok(clientSrc.includes('envTitle: "Environment check"'));
+    assert.ok(clientSrc.includes('envTitle: "环境体检"'));
+  });
+
+  it('runs the two one-click fixes against the server routes (§11.3E)', () => {
+    assert.ok(clientSrc.includes('async runFix(kind)'));
+    assert.ok(clientSrc.includes('fetch("/vision-bridge/fix-" + kind'));
+    assert.ok(clientSrc.includes('props.runFix(target)'));
+    assert.ok(clientSrc.includes('t("fixAdmission")'));
+    assert.ok(clientSrc.includes('t("fixModlens")'));
+    assert.ok(clientSrc.includes('t("fixApplied")'), 'fix feedback mentions the restart requirement');
+  });
+
+  it('carries the admission and modlens rows with their human explanations (§11.3E)', () => {
+    assert.ok(clientSrc.includes('admissionMissing: "Admission patch not applied"'));
+    assert.ok(clientSrc.includes('admissionMissing: "准入补丁未生效"'));
+    assert.ok(clientSrc.includes('modlensConflict: "modlens paste conflict"'));
+    assert.ok(clientSrc.includes('modlensConflict: "modlens 粘贴冲突"'));
+    assert.ok(clientSrc.includes('t("admissionExplain")'));
+    assert.ok(clientSrc.includes('t("modlensExplain")'));
+    assert.ok(clientSrc.includes('t("envReady")'), 'the all-✓ collapsed summary exists');
+  });
+
+  it('collapses the environment panel to one green line when everything is ok (§11.3E)', () => {
+    assert.ok(clientSrc.includes('const allOk = connectivityOk && admissionOk && modlensOk;'));
+    assert.ok(clientSrc.includes('if (allOk) {'));
+  });
+});
+
 describe('package.json — dsh.client declaration', () => {
   it('exposes ./client', () => {
     assert.equal(pkg.exports['./client'], './lib/client.js');
   });
 
-  it('declares the web client half with the three host packages', () => {
+  it('declares the web client half with the four host packages (§11.2-6: +dsh-api-remotes)', () => {
     assert.equal(pkg.dsh.client.platform, 'web');
     assert.deepEqual(pkg.dsh.client.inject, [
       '@deepseek-ai/dsh-client-ui-slots',
       '@deepseek-ai/dsh-client-ui-settings',
       '@deepseek-ai/dsh-client-locale',
+      '@deepseek-ai/dsh-api-remotes',
     ]);
   });
 
