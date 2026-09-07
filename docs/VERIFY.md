@@ -2,11 +2,14 @@
 
 权威依据：`docs/design.md(本仓内快照)` §7。
 接线已写好但**本交付不重启 DSH web、不执行 profile pnpm install**（硬约束⑦）——以下第 0 步完成后逐条人工验证。
+**〔2026-09-07 §10 交付注〕**设置界面交付（design §10）已用 robocopy /MIR（排除 .git、node_modules）把含 `lib/client.js`
+与新 `package.json`（`dsh.client` 声明）的源码同步到安装副本，**但未重启 DSH web**——重启 + 浏览器硬刷新 +
+§8 活体验证由主会话执行（重启会终止运行中的会话，不在交付内完成）。
 
 ## 0. 安装与挂载（先决）
 
 1. ```powershell
-   cd <DSH_HOME>\profile
+   cd <DSH_HOME>
    pnpm install
    ```
    （`@dsh-external/dsh-vision-bridge` 经 `file:../../../plugins/dsh-vision-bridge` 进 profile 依赖闭包。**这一步不可省**——2026-09-05 曾因加了依赖没跑 install,启动即 `cannot resolve profile bundle` 三连崩;且 file: 依赖是复制不是链接,此后每次改 `plugins/dsh-vision-bridge/` 源码都要重跑本步(或手动同步 `profile/profiles/web/node_modules/@dsh-external/` 副本)才生效。挂载由插件自带 cordis.patch.yml 完成,**不要再往 `profile/cordis.patch.yml` 手动加同名 insert 行**(duplicate loader entry id 同样崩启动);覆盖配置走 settings.yaml 的 `vision-bridge:` 键。）
@@ -15,8 +18,10 @@
    `vision-bridge: first run — froze provider defaults …` 或 `configuration applied live`）。
 4. 首运行固化检查：`<DSH_HOME>\vision-bridge\provider-defaults.json` 生成（本 profile 已在 settings.yaml 显式给出
    provider，固化文件内容与之一致）。
-5. 设置页（Web → Settings）出现 **vision-bridge** 命名空间，字段与 §5.7 一致（mode/provider/credential/timeoutMs/
-   concurrency/cache/maxImageBytes/maxImagePixels/visionCapabilities/language/autoMode）。
+5. 设置页出现 vision-bridge 配置面，字段与 design §10.1 一致（mode/provider/credential/timeoutMs/
+   concurrency/cache/maxImageBytes/maxImagePixels/visionCapabilities/language/autoMode/**promptExtra**）。
+   **〔2026-09-07 勘误〕** v0.1.x 无 client 半侧，设置页本就**不可见**（design §5.7 勘误：无卡片即不渲染）——
+   本条自 §10 交付起，按 §8 在 设置→插件 页的 vision-bridge 卡片上验证。
 6. 缓存目录 `<DSH_HOME>\vision-bridge\cache\` 在首次分析后出现 `tool.json` / `auto.json`。
 
 ## 1. 多模态模型声明 image 后原样直读
@@ -55,9 +60,10 @@
 
 ## 3. auto 模式：同轮注入、超时不阻塞、失败仅日志
 
-> 定位说明：受服务端准入规则（见 §2）与 auto 模态门禁（round-3）双重约束，auto 的触发条件在常规流程中不可自然发生，
-> 现实定位为**防御性兜底**（上游准入策略放开或程序化注入图片时生效）；文本-only 会话的主路径是 §2 的 tool 模式。
-> 本节步骤用于在约束放宽后回归验证，也可用注入桩在单测层验证（tests/auto.test.mjs 已覆盖）。
+> 定位说明〔2026-09-07 改写〕：本部署已打服务端准入补丁（`scripts/patch-admission-gate.mjs`），文本-only 会话
+> 新图照常入账——auto 的触发条件在补丁生效时**可以自然发生**，并已于 2026-09-07 活体验证（文本-only glm-5.3
+> 会话，auto 同轮 `<vision-context>` 注入真实出现，见 §2 活体记录）。「防御性兜底」框定仅适用于未打补丁的
+> 窗口（DSH 更新覆盖核心包后、重跑补丁脚本前）。本节步骤为常备回归流程；单测层 tests/auto.test.mjs 覆盖不变。
 
 1. 设置页把 `vision-bridge.mode` 改为 `auto`（或保持 `both`）。
 2. 文本-only 模型会话粘贴截图 + 问题"截图里报错是什么？"。
@@ -95,15 +101,32 @@
 
 ## 7. 设置页改 provider/mode 即时生效
 
+> 〔2026-09-07 勘误〕v0.1.x 无设置界面（design §5.7 勘误），本节步骤在当时不可执行；§10 交付后经
+> 设置→插件 页 vision-bridge 卡片执行（见 §8），`promptExtra` 同理即时生效（纳入缓存指纹，改动即 miss）。
+
 1. Web 设置页改 `provider.model` → 无需重启，下一次工具调用/自动分析即用新模型
    （缓存指纹随 model 变化，自然 miss）。
 2. `mode` 在 tool ↔ auto ↔ both 间切换 → 立即生效（gate 每事件/每步实时判定）：
    切到 tool 后贴图不再触发自动分析；切回 both 恢复。
 3. `provider.credential` 指向另一已配置凭证名 → 下一次调用即用新凭证（per-operation resolve，无重启、无缓存）。
 
+## 8. 设置界面卡片 + promptExtra(2026-09-07 增订,design §10)
+
+> 前置:插件源码(含 lib/client.js 与 package.json 的 dsh.client 声明)已 robocopy 同步安装副本,重启 DSH web,浏览器**硬刷新**页面(client 插件清单变化)。
+
+1. 设置 → 插件 页出现 **vision-bridge 卡片**,字段与 design §10.1 一致(provider.baseURL/model、credential、mode、language、promptExtra 多行、outputFormat、timeoutMs、concurrency、autoMode.maxPerTurn),当前值与 `settings.yaml` 一致。
+2. UI 改 `provider.model` 保存 → 无重启,下一次 `vision_bridge_read` 用新模型(日志可见,缓存 miss)。
+3. promptExtra 写「回答末尾附一行 MARKER-EXTRA」保存 → 文本-only 会话贴图提问,代读输出含该标记;
+   同图同问改指令再问 → 不命中旧缓存(新答案);清空指令 → 输出回默认。
+4. 非法值(timeoutMs=5 / promptExtra>2000 字)保存 → 卡片显示错误原因,旧配置生效,
+   日志出现 keeping the previous configuration。
+5. client 半侧加载零 console 错误;F5 后卡片仍在;profile cordis.patch.yml 临时加
+   `disabled: true` → 卡片消失且设置页不崩(撤销恢复)。
+6. 插件根 `node --test` 全绿(含 promptExtra 新用例)。
+
 ## 附：自动化测试
 
-- 插件根：`node --test`（196+ 用例；含 vendor 引擎库 108 例）。
+- 插件根：`node --test`（232 用例；含 vendor 引擎库 108 例、§10 promptExtra/client 静态 23 例）。
 - 真实调用冒烟：设置 `VISION_BRIDGE_SMOKE=1`、`VISION_BRIDGE_SMOKE_BASEURL`、`VISION_BRIDGE_SMOKE_MODEL`、
   `VISION_BRIDGE_SMOKE_KEY` 后运行 `node --test tests/smoke.test.mjs`。
 - 用例 × 验收映射：`tests/TEST-MATRIX.md`。

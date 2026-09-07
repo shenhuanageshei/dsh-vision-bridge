@@ -1,4 +1,4 @@
-> 本文件为设计文档快照（2026-09-04，含 2026-09-05 启动事故勘误）。路径已脱敏为相对/占位形式。
+> 本文件为设计文档**唯一权威**(原 2026-09-04 快照,含 2026-09-05/2026-09-07 勘误与 §10 增订;原内部权威 spec 自 2026-09-07 起冻结为历史存档,后续修订只进本文件)。路径已脱敏为相对/占位形式。
 
 # dsh-vision-bridge 设计:会话截图按模型能力自动分流
 
@@ -93,7 +93,7 @@ vision-bridge 库现状缺 package.json/tsconfig 且 .js specifiers 无 dist,不
 ### 5.5 缓存(M2/M3)
 
 - key = `attachmentId(内容寻址) + questionHash + 已解析配置指纹`〔评审#5:指纹 = endpoint baseURL + model + language + outputFormat/capabilities + 提示词/schema 版本〕;tool 与 auto 分 namespace(修双层互污染)。设置变更 → 指纹变化 → 自然 miss,旧条目经 LRU(maxEntries)/TTL 老化,不主动清除。
-- 同 key 在途去重;并发闸默认 2(可配);经库的 `CacheBackend` 插槽由插件提供异步去抖实现(不改库源码),持久目录 `profile/vision-bridge/cache`,不与 modlens CLI 共目录。
+- 同 key 在途去重;并发闸默认 2(可配);经库的 `CacheBackend` 插槽由插件提供异步去抖实现(不改库源码),持久目录 `<DSH_HOME>/vision-bridge/cache`〔路径令牌统一:`<DSH_HOME>` = profile 根,本机 `D:\DSH-Portable\profile`;全文及 VERIFY 均用此令牌〕,不与 modlens CLI 共目录。
 
 ### 5.6 适配器 wrapper(M2,插件层包库,不动库源码)
 
@@ -114,7 +114,7 @@ vision-bridge:
   concurrency: 2
   cache:
     maxEntries: 256
-    persistDir: ""       # 缺省 <profile>/vision-bridge/cache
+    persistDir: ""       # 缺省 <DSH_HOME>/vision-bridge/cache
   maxImageBytes: 10485760
   maxImagePixels: 40000000
   visionCapabilities:
@@ -124,7 +124,7 @@ vision-bridge:
     maxPerTurn: 3   # 语义:每条 user/message 事件最多分析的图片数(评审#15 定版)
 ```
 
-Web 设置页由 settings 服务自动渲染;首次运行显式拷贝 toolkit provider 默认值后本地固化,**不 live 读 toolkit 命名空间**(防 schema 漂移);凭证一律 CredentialRef,勿读 process.env。
+Web 设置页由 settings 服务自动渲染〔**2026-09-07 勘误:此判断错误**。设置页并不自动渲染第三方命名空间——Plugins 设置页渲染的是「服务端 served 命名空间 ∩ 注册了 UI 卡片的命名空间」的**交集**,无卡片的命名空间不渲染(`dsh-client-ui-settings-plugins/lib/client.js:1099-1103`,原文 "A served namespace no card claims renders nothing")。设置界面必须由插件自带 **client 半侧**(package.json `dsh.client` 声明 + `exports["./client"]`)注册 `settings.plugin.item` 卡片或 `settings.section` 设置节(参照 vision-toolkit `lib/client.js:538-544`)。v0.1.1 无 client 半侧,故设置页不可见——补齐方案见 §10〕;首次运行显式拷贝 toolkit provider 默认值后本地固化,**不 live 读 toolkit 命名空间**(防 schema 漂移);凭证一律 CredentialRef,勿读 process.env。
 
 ### 5.8 受影响文件清单与命令〔评审#7〕
 
@@ -164,7 +164,7 @@ Web 设置页由 settings 服务自动渲染;首次运行显式拷贝 toolkit pr
 6. fiber 重启可重建、卸载 disabled 行 warn 不致命;
 7. 设置页改 provider/mode 即时生效。
 
-**测试矩阵〔评审#4,每条用户故事 × 正常/边界/错误,全部 node:test〕**:坏 ref/未知 ref → isError+可行动信息;附件读取失败;凭证错配/缺失;缓存文件损坏 → 降级重建不崩溃;回合取消 → 在途调用中止(signal 接线);超限(字节/像素/每轮条数);空 VLM 响应 → 视为失败不缓存;多命中 → 候选列表;另含一条**真实调用 smoke test**(方法论要求)。测试映射表随实现写入插件仓库 tests/,每条验收标准至少一个对应用例。
+**测试矩阵〔评审#4,每条用户故事 × 正常/边界/错误,全部 node:test〕**:坏 ref/未知 ref → isError+可行动信息;附件读取失败;凭证错配/缺失;缓存文件损坏 → 降级重建不崩溃;回合取消 → 附件读取(readImageRequest)即时中止〔2026-09-07 对齐已验证边界:引擎 analyze() 不收 signal,VLM HTTP 调用与重试退避不可取消,待上游 signal 透传后根治,VERIFY §2.6 已记〕;超限(字节/像素/每轮条数);空 VLM 响应 → 视为失败不缓存;多命中 → 候选列表;另含一条**真实调用 smoke test**(方法论要求)。测试映射表随实现写入插件仓库 tests/,每条验收标准至少一个对应用例。
 
 ## 8. 实施里程碑
 
@@ -181,6 +181,86 @@ M1 库工程化(manifest+tsconfig+dist+vendor)→ M2 插件骨架+tool 模式(�
 | 5 | 🟡 | auto 首轮失明 | pre-step 同轮注入+超时放行+PromptContext 兜底 |
 | 6 | 🟡 | 8hex 碰撞/双占位符形态 | 双形态解析+多命中候选列表 |
 | 7 | 🔵 | inject 静默 pending/fiber 重启/配置漂移 | 最小清单+ctx.get+可重建缓存+首次拷贝固化 |
+
+## 10. 设置界面 + promptExtra(2026-09-07 增订,经用户确认)
+
+> 背景:用户报告设置页无 vision-bridge 命名空间(§5.7 勘误所述根因),并要求把 prompt 附加指令做进设置 UI。用户已选定「附加指令 promptExtra」粒度(保留 8 段结构契约,不做 system 全量覆盖)与「Plugins 设置页卡片」形态。
+
+### 10.1 需求(三层)
+
+**总目标**:vision-bridge 的全部配置(含新增 promptExtra 附加指令)可在 DSH 设置 UI 中查看、修改并即时生效;指令影响 tool/auto 两模式的 VLM 代读输出;清空即回默认。
+
+**功能用户故事**:
+1. 作为用户,我打开 设置→插件 页,能看到 vision-bridge 卡片,显示当前生效配置(provider/credential/mode/language/outputFormat/timeoutMs/concurrency/autoMode.maxPerTurn/promptExtra),不必手改 settings.yaml。
+2. 作为用户,我在卡片里改任一字段并保存,下一次工具调用/自动分析即用新值,无需重启 DSH(live 链路已存在,§5.7)。
+3. 作为用户,我在 promptExtra 写附加指令(如「优先转录图中中文文字;省略坐标」),代读输出遵循该指令;改指令后同图同问不命中旧缓存;清空回默认。
+4. 作为用户,我填了非法值(超长指令/非法 baseURL 等),保存被拒并看到原因,旧配置继续生效(既有 refuse-and-keep-old 链路)。
+
+**非功能**:零新增运行时依赖;client 半侧纯 JS(no JSX/no TS/无构建);写入全部走既有 settings 服务 validate/live 链路;promptExtra 纳入缓存指纹;en/zh 双语文案;不改核心包、不改 vendor 引擎;零依赖 node --test 为本仓 §5.1 沿用约定(本仓无 METHODOLOGY.md,系项目自持规范而非外部文件引用)。
+
+### 10.2 运行时事实(本机实测,2026-09-07)
+
+1. **client 半侧装载协议**:`window.__ModuleLoader__.load({id, factory:(require)=>{…}})`,factory 返回 cordis 风格插件对象 `{name, inject:[服务名], apply(ctx)}`;react 经 `require("react")` 注入;**浏览器半侧必须纯 JS,无 JSX/TS**(`dsh-cordis-client-runner/lib/client.js:55,169`);package.json `dsh.client={platform:'web',inject:[宿主包]}` + `exports["./client"]` 声明(参照 dsh-effort-switcher、@hytime/dsh-thinking-effort、vision-toolkit 三例)。
+2. **设置页两账本交集**:Plugins 设置页经 ConfigurablePluginsTabController 枚举 `ctx.slots.entries('settings.plugin.item')` 且 `options.key` 命中 served 命名空间才渲染(`dsh-client-ui-settings-plugins/lib/client.js:1099-1153`);卡片为手写 React 控件;备选面 `settings.section`(vision-toolkit 先例 `lib/client.js:538-544`)。
+3. **设置读写面**:`ctx.settingsScope.bind({namespace})` → scope 读取/原子写(`dsh-client-ui-settings/lib/client.js:944-1045`,set/unset/mutate);写入触发服务端 validate,拒绝即保旧(§5.7 既有行为,VERIFY §6.2 已验)。
+4. **指令拼装点**:`lib/index.js:220-223` language 指令已追加在 userRequest 尾部;`AnalyzeParams` 无 system 钩子(vendor `types.ts:70-76`),promptExtra 沿用同一拼装点(用户已确认此取舍)。
+5. **缓存指纹**:`configFingerprint`(`lib/config.js:184-192`)已含 baseURL/model/language/outputFormat/ENGINE_PROMPT_VERSION;promptExtra 加入同列。
+6. **生效链路**:settings.watch → state.config 重建 → analyzeImage 每次调用实时读取(`lib/index.js:198-232`),tool/auto 共用,零额外接线。
+
+### 10.3 方案
+
+**A. 服务端 promptExtra**(改 `lib/config.js` + `lib/index.js`):
+- schema:`promptExtra: z.string().default('')`;resolveConfig trim 后透传;校验:长度 ≤2000 字符(拒绝即走 refuse-and-keep-old)。
+- 指令拼装:`userRequest = question + languageDirective + (promptExtra ? '\n\n' + promptExtra : '')`(空指令零字节变化,缓存键不因空值漂移——指纹对空值归一)。
+- `configFingerprint` 纳入 `resolved.promptExtra`(空串与缺省同指纹)。
+
+**B. client 半侧设置卡片**(新增 `lib/client.js` + package.json 声明):
+- `window.__ModuleLoader__.load` 工厂,`require("react")`,React.createElement 手写控件(无构建步骤)。
+- **inject/装载清单**〔依 §10.2 实测先例;错名 = 静默不加载,§2-9〕:package.json `dsh.client = {platform:'web', inject:['@deepseek-ai/dsh-client-ui-slots','@deepseek-ai/dsh-client-ui-settings','@deepseek-ai/dsh-client-locale']}`;返回插件对象 `inject:['slots','settingsScope','locale']`(服务名分别依 effort-switcher 的 `'slots'`、settings-plugins 的 `ctx.settingsScope`、toolkit 的 `ctx.locale` 三例实测)。实现首步断言:重启后 console 零 `cannot get property "x" without inject`,且卡片槽位实际出现在 Plugins 页。
+- 注册 `settings.plugin.item` 卡片,key=`vision-bridge`;表单字段=§10.1 故事 1 全集,promptExtra 用 `<textarea>` 多行(带 2000 字符计数提示)。
+- 交互:进入卡片加载当前值 → 本地草稿编辑 → 「保存」原子 `scope.mutate(ops)` → 服务端 validate;失败显示错误并保留草稿,成功后刷新为生效值;「重置」放弃草稿回当前生效值。空 baseURL/model 输入框 placeholder 提示「留空=使用首运行固化默认」。credential 为纯文本输入(CredentialRef 名),不做密码框(名非密钥)。
+- i18n:`ctx.locale.register('vision-bridge-ui', {en, zh})`;样式沿用宿主 CSS 变量(--dsw-alias-*),内嵌最小 css(参照 effort-switcher)。
+- 失效面:插件 disabled 行 warn-skip 时命名空间不 served → 卡片自动不渲染(两账本交集语义),无需额外处理。
+
+### 10.4 受影响文件清单
+
+| 文件 | 动作 | 职责 |
+|---|---|---|
+| `plugins/dsh-vision-bridge/lib/config.js` | 修改 | promptExtra schema/校验/指纹 |
+| `plugins/dsh-vision-bridge/lib/index.js` | 修改 | 指令拼装(:220-223 处) |
+| `plugins/dsh-vision-bridge/lib/client.js` | 新增 | 设置卡片(纯 JS module-loader 工厂) |
+| `plugins/dsh-vision-bridge/package.json` | 修改 | `dsh.client` 声明 + `exports["./client"]` + files 增 lib/client.js |
+| `plugins/dsh-vision-bridge/tests/*.test.mjs` | 修改/新增 | promptExtra 用例(schema 默认空/校验拒超长/指纹参与/拼装单测/auto 路径同拼装) |
+| `docs/design.md` | 修改 | §5.7 勘误 + 本章节 |
+| `docs/VERIFY.md` | 修改 | 新增 §8 设置界面人工验收清单 |
+| 安装副本 + 重启 | 操作 | robocopy /MIR(排除 .git node_modules)→ 重启 DSH web → 刷新页面(client 清单变化) |
+
+### 10.5 验收标准(映射 VERIFY §8)
+
+1. 设置→插件 页出现 vision-bridge 卡片,字段齐全,当前值与 settings.yaml/生效日志一致;
+2. UI 改 provider.model → 无重启,下一次 vision_bridge_read 走新模型(缓存 miss);
+3. promptExtra 写「回答末尾附一行 MARKER-EXTRA」→ 代读输出含该标记;同图同问改指令后不命中旧缓存;清空后输出回默认;
+4. 非法值(timeoutMs=5 / promptExtra>2000 字)保存被拒,卡片显示错误原因,旧配置生效(日志 keeping previous);
+5. client 半侧加载零 console 错误;刷新页面卡片仍在;插件 disabled 时卡片消失且页面不崩;
+6. `node --test` 全绿(含新增 promptExtra 用例)。
+
+### 10.6 测试矩阵增补
+
+| 验收条 | 正常 | 边界 | 错误 |
+|---|---|---|---|
+| §10.5-3 | 指令拼装单测:非空 promptExtra 出现在 userRequest 尾部 | 空串/纯空白归一为空,指纹与缺省一致 | — |
+| §10.5-4 | resolveConfig 接受 ≤2000 字符 | 恰 2000 字符 | >2000 拒绝抛 TypeError;非法 UTF-16 孤项拒 |
+| 缓存 | 指令变化 → configFingerprint 变化 | — | — |
+| client | 卡片注册槽位/字段渲染(node 环境静态断言导出形状) | — | — |
+
+### 10.7 风险登记(本章增补)
+
+| # | 级别 | 风险 | 缓解 |
+|---|---|---|---|
+| 8 | 🟠 | `settings.plugin.item` 卡片契约非公开文档 API(由 settings-plugins 内部实现推断) | 实现时以运行时行为为准验证;备选面 `settings.section`(toolkit 同构先例)降级切换,卡片代码面改动局部 |
+| 9 | 🟠 | client 服务名(inject 数组)猜错 → 插件静默不加载 | 以 effort-switcher/toolkit 实测声明为准;boot 后 console 无 "cannot get property" 即通过 |
+| 10 | 🟡 | 纯 JS 手写 React 控件可维护性 | 字段控件极简(input/select/textarea + label),无复杂状态;样式靠宿主变量 |
+| 11 | 🔵 | promptExtra 与 language 指令顺序耦合 | 固定顺序 language→promptExtra 并单测锁定 |
 
 ## 附录 A:架构评审报告(全文)
 

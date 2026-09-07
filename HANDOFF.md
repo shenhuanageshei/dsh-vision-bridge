@@ -11,7 +11,7 @@ DeepSeek Harness(DSH)web GUI 里,任何模型的会话都能 Ctrl+V 粘贴截图
 - DSH portable 根:D:\DSH-Portable(web GUI http://127.0.0.1:3080;进程=node.exe 跑 dsh-web-launch.mjs;会话持久化,重启后自动恢复)
 - 插件仓库(独立 git,已发布 GitHub:github.com/shenhuanageshei/dsh-vision-bridge,公开):D:\DSH-Portable\plugins\dsh-vision-bridge(master=c3b0d0c;local-history 分支=完整开发历史,含本机真实路径,勿推送)
 - 安装副本(file: 依赖是复制不是链接;插件源码改动后必须同步这里,否则不生效):D:\DSH-Portable\profile\profiles\web\node_modules\@dsh-external\dsh-vision-bridge
-- 权威设计文档:仓库 docs/design.md(快照)/ D:\DSH-Portable\docs\superpowers\specs\2026-09-04-dsh-vision-bridge-design.md(内部权威)
+- 权威设计文档:仓库 docs/design.md(**唯一权威**,2026-09-07 起含 §10 设置界面+promptExtra 增订及全部勘误);内部 spec D:\DSH-Portable\docs\superpowers\specs\2026-09-04-dsh-vision-bridge-design.md 已冻结为历史存档(仅指针,不再更新)
 - bundled node:D:\DSH-Portable\node\node\node.exe(v24,node --test 零依赖可跑;zstd 可用)
 - 注意:pnpm 不在 PATH(此前修复用的是某处自带 pnpm,位置未定位);改插件源码后同步安装副本用 robocopy /MIR(排除 .git 与 node_modules)或定位到 pnpm 再 install
 
