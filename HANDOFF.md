@@ -27,7 +27,15 @@ DeepSeek Harness(DSH)web GUI 里,任何模型的会话都能 Ctrl+V 粘贴截图
 
 ## 原卡点已解决(2026-09-07 活体取证结论)
 
-**结论:当前代码无插件侧缺陷;§2 全链路已在全新浏览器页面活体验证通过。用户遇到的"粘贴完全无响应"是长期未刷新的 GUI 标签页内的陈旧客户端状态,硬刷新页面即恢复。**
+**结论:当前代码无插件侧缺陷;§2 全链路已在全新浏览器页面活体验证通过。**
+
+### 〔2026-09-07 终局定案〕粘贴静默死的最终根因 = modlens paste-to-path 接管(非 DSH / 非 vision-bridge)
+- **真凶**:`@deepseek-ai/dsh-typert-registry` 客户端(dsh/client.js `onPaste`)在 document-capture 层拦截含图 paste → 查 `/modlens/paste?model=<当前模型>` → 文本-only 模型(qax:glm-5.3)verdict `takeover:true` → `preventDefault + stopImmediatePropagation` → 图片被上传 modlens 临时目录、**文件路径文本**插回输入框。DSH 摄入链从未被触发。
+- **"第一贴成功、之后全死"机理**:verdict 缓存未就绪(at===0)时放行 native → 首贴成功;verdict 到手后每次贴图全被接管——与用户 9/5→9/6 原始 bug 形态吻合。
+- **三层叠加干扰取证**(每层独立制造假象,均已处置):①modlens 接管(主因)②effort-switcher 槽位渲染崩溃(`remote.session without inject`,已卸载,快照 20260907-172832)③长期未刷新标签页的陈旧 JS。
+- **处置**:`profile/profiles/web/cordis.patch.yml` 尾部 override 行 `- id: modlens / config: {pasteToPath: false}`(官方 harness-setup.md 指定开关;需重启生效——HMR 对 modlens 的 scoped webServer fiber 不干净)→ `/modlens/paste` 404,客户端自动缴械。modlens 其余能力(路径读图/全文 OCR/failover)不受影响(design §6 分工)。快照 20260907-183203。
+- **终局验证(2026-09-07 晚)**:用户在**本会话**(qax:glm-5.3 文本-only)真实 Ctrl+V 贴图成功(sha256:620d866f 入账)→ 占位符投影 → auto 迟到 vision-context 注入生效 → vision_bridge_read 返回完整结构化描述。**§2 全链路在生产用户路径闭环。**
+- **取证方法论**:最终由 CDP `DOMDebugger.getEventListeners` 列出 document 上的 paste capture 监听 + `Debugger.getScriptSource` 读出 onPaste 源码钉死。关键矛盾点 = 探针/fiber/store 全绿但 Lexical handler 零调用 → 事件在更上游被截。
 
 ### 活体取证证据链(2026-09-07 11:40–12:10,CDP 实挂全新 Chrome + token URL)
 1. 全新页面 + 合成粘贴(DataTransfer 携带 file:image/png)→ PASTE_COMMAND 消费(defaultPrevented)→ 缩略图出现。客户端链路 PASTE_COMMAND→intakeFiles→intakeImages→addImages→createDraftImages 全部健康(dsh-client-ui-conversation/lib/client.js:14773-14787/15429-15440/16214-16223)。
