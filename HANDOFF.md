@@ -25,10 +25,25 @@ DeepSeek Harness(DSH)web GUI 里,任何模型的会话都能 Ctrl+V 粘贴截图
    - DSH 更新会覆盖核心包 → 更新后必须重跑该脚本 + 重启 DSH
 4. auto 迟到注入 + PromptContext 兜底:活体验证通过(9/5,vision-context 真实出现,UNTRUSTED 声明、一次性消费均正确)。
 
-## 当前唯一卡点(交接原因,按优先级排查)
-文本-only 会话(如 glm-5.1)Ctrl+V 粘贴截图完全无响应:无缩略图、无报错、文字也粘贴不进;甚至多模态会话粘贴也曾无响应(9/5 时可行)。
+## 原卡点已解决(2026-09-07 活体取证结论)
 
-### 已排查证据链(勿重复)
+**结论:当前代码无插件侧缺陷;§2 全链路已在全新浏览器页面活体验证通过。用户遇到的"粘贴完全无响应"是长期未刷新的 GUI 标签页内的陈旧客户端状态,硬刷新页面即恢复。**
+
+### 活体取证证据链(2026-09-07 11:40–12:10,CDP 实挂全新 Chrome + token URL)
+1. 全新页面 + 合成粘贴(DataTransfer 携带 file:image/png)→ PASTE_COMMAND 消费(defaultPrevented)→ 缩略图出现。客户端链路 PASTE_COMMAND→intakeFiles→intakeImages→addImages→createDraftImages 全部健康(dsh-client-ui-conversation/lib/client.js:14773-14787/15429-15440/16214-16223)。
+2. **真实键盘 Ctrl+V**(CDP Input.dispatchKeyEvent,注意 modifier 位 Ctrl=2 而非 4)+ OS 剪贴板位图(PowerShell STA SetImage)→ paste 事件 items=[file:image/png] → 缩略图真实出现。
+3. **§2 全链路**(文本-only 模型 glm-5.3 会话):粘贴 120×60 PNG → user/message 真实入账 image block(sha256:53c42ca9…)→ 模型 reasoning 原文引用占位符 "image was omitted because this model accepts text only" → 显式 tool/call vision_bridge_read{ref:"53c42ca9"}(seq 1491)→ tool/result 带 [UNTRUSTED EVIDENCE…] 头结构化描述且正确读出图中文字 PASTE-TEST-A(seq 1492)→ 模型正确作答。auto 模式 vision-context 同轮注入亦在同一会话首轮验证成功。
+4. **glm-5.1(用户原始失败模型)粘贴同样成功**:切模型后粘贴,imageIds 2→3,缩略图出现。
+5. 全量 node --test:209 pass / 0 fail。
+
+### 根因定性(用户标签页为何全静默)
+- 用户 GUI 标签页跨多日未硬刷新(9/3 20:54 客户端包 dsh-client-ui-conversation 更新、9/5-9/7 多次服务端重启/插件更新),页内运行的是陈旧 JS + 可能楔死的输入机状态;其失败期间会话日志零新增(粘贴未达服务端)与"客户端本地静默"一致。**修复动作 = 刷新 GUI 页面(F5)**。
+- 取证中发现两个上游客户端静默分支(非本插件范围,已记录,不改核心包):
+  - `shell.addImages` 在 input.phase=adjudicating/submitting 时返回 false,包装层静默 releaseDraftImages 且 return null,无任何 toast(client.js:11645-11651 + 16214-16223);
+  - `maxImagesPerMessage=3` 超限时仅弹约 3s 的 toast,图片静默不入账(client.js:15434);草稿按会话持久化,滞留 3 张旧图后新贴图全部"看似无响应"。
+- 间歇复现过一次"切模型后立即粘贴静默失败"(约 15s 内),与上述 phase/投影过渡窗口吻合;静置后恢复。
+
+### 已排查证据链(9/7 前一段排查,结论已被上文取代但保留供追溯)
 - 客户端粘贴处理器存在:dsh-client-ui-conversation\lib\client.js 的 PASTE_COMMAND handler(@547464 附近)→ clipboardData.items 过滤 kind==="file" → handlers.intakeFiles(files);无模型条件。
 - intakeImages(@583597 附近)首行:if (addImages === void 0 || files.length === 0) return; —— 唯一静默返回点;其余分支最多 toast 报错(非静默)。
 - addImages 由 inputHub inject 按 sessionId 提供(@615205 附近),sessionId 有值时恒有 addImages,无模型条件;inputHub.shell 本身也无模型条件。
