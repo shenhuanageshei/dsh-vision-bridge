@@ -161,10 +161,15 @@ describe('lib/client.js — §11 credential three-forms', () => {
     assert.ok(clientSrc.includes('this.credentialMode = "manual"'));
   });
 
-  it('saves a pasted key as describe-then-set with conflict refusal (§11.3C form 3)', () => {
+  it('saves a pasted key through the credential service with overwrite-on-existing (§11.3C form 3, 2026-09-07 revision)', () => {
     assert.ok(clientSrc.includes('await service.set(entry, key)'), 'the key goes to the DSH credential service');
-    assert.ok(clientSrc.includes('this.credentialError = { kind: "conflict", name: entry }'), 'an existing entry refuses without overwriting');
+    // User feedback revision: changing a key must NOT require a new entry
+    // name — set() overwrites by design; the old describe-precheck/conflict
+    // rejection was removed.
+    assert.ok(!clientSrc.includes('this.credentialError = { kind: "conflict", name: entry }'), 'no conflict refusal: key rotation overwrites the entry');
     assert.ok(clientSrc.includes('this.staged.set("credential", entry)'), 'only the entry NAME is staged into settings');
+    assert.ok(clientSrc.includes('type: state.showKey ? "text" : "password"'), 'the pasted key input is password-masked with a reveal toggle');
+    assert.ok(clientSrc.includes('toggleShowKey'), 'reveal toggle method exists');
   });
 
   it('describes credential candidates through remote.credentials (§11.3C form 1/2)', () => {

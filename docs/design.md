@@ -413,6 +413,10 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 3 | 🔵 | describe-then-set 的 TOCTOU 窗口(并发同名创建时 set 无条件覆盖;宿主 set 无 if-not-exists 语义) | 单用户桌面场景实际风险极低;宿主 API 下无更优解,留档不修 |
 | 4 | 🔵 | §11.6 边界格「密钥空/全空白→拒」代码已实现但缺静态断言用例 | 缓后:随下轮测试补一条断言,不阻塞活体验收 |
 | 5 | 🔵 | push 时机:本地 ahead 3(e34f11e/1175e8c/bef4449) | 定案:活体验收(VERIFY §9)通过后统一推送(遵循 §10 先例) |
+| 6 | 🟡 | 〔2026-09-07 用户反馈修订〕凭证 form 3 冲突拒绝语义错误:换 Key 被迫永远新增条目。修订:set() 直接覆盖已存在条目(用户本意就是换 Key);describe 预检整体移除(其拒绝态曾阻断合法换钥) | 已实现:save() 贴密钥路径无预检直接 set;测试断言同步修订 |
+| 7 | 🟡 | 〔用户反馈〕贴密钥输入框明文展示。修订:password 掩码 + 👁/🙈 切换按钮(state.showKey) | 已实现+测试断言 |
+| 8 | 🟡 | 〔用户反馈〕Provider 联动读不到 settings.yaml 的 baseURL 就留空(zai/minimax 等内置 URL provider 不可用)。修订:server 增 readCatalogBaseUrls()——扫 node_modules/@earendil-works/pi-ai/dist/providers/*.js 提取内置 baseUrl;/anthropic 尾缀(Anthropic 协议面)改写为同主机 /v1(OpenAI 面,活体验证 404→200);settings.yaml 显式值仍优先 | 已实现;M0-1 的 PARTIAL 降级就此升级为 catalog 补全 |
+| 9 | 🔵 | 〔用户反馈〕保存成功提示不明显。修订:save() 成功后 4 秒绿色「✓ 已保存」徽章(savedAt/savedFlash) | 已实现 |
 
 ## 附录 A:架构评审报告(全文)
 
