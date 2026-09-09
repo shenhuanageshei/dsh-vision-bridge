@@ -59,8 +59,9 @@
 | §12.4-2 补丁失→自动重打 | 干净文件→applyAdmissionPatch 落 marker+.bak，1 行 info 且含 `(effective on next boot)` | 两文件一有一无→只补缺的（skipped+patched） | — | self-heal.test.mjs（patched/部分 2 例） |
 | §12.4-3 自愈失败不阻塞启动 | — | nodeModulesDir 不存在→failed（两文件 error），不抛 | stub applyAdmissionPatch reject→捕获、恰 1 行 error、status failed | self-heal.test.mjs（reject/缺失目录 2 例） |
 | §12.2 A nodeModulesDir 双源 | 插件 `../..` 命中核心包→用它（安装副本=node_modules 本身） | 无核心包→DSH_HOME 推导；DSH_HOME 未设→主推导兜底 | — | self-heal.test.mjs（resolveNodeModulesDir 1 例） |
-| §12.4-4 探针三态 | 入账→dead（并调用 cleanup seam）；拒绝码 MODEL_DOES_NOT_SUPPORT_IMAGES→live | 无 RPC 面/无 scratch 会话→unknown 且零提交；cleanup 抛错不改判 | agent-busy/其它异常/超时→unknown（不误报）；classifyAdmissionProbeError 直测 | self-heal.test.mjs（probe 7 例+classify 1 例） |
+| §12.4-4 探针三态 | 入账→dead（并调用 cleanup seam）；拒绝码 MODEL_DOES_NOT_SUPPORT_IMAGES→live | 无 RPC 面/无 scratch 会话→unknown 且零提交；cleanup 抛错不改判 | agent-busy/其它异常/超时→unknown（不误报）；classifyAdmissionProbeError 直测 | self-heal.test.mjs（probe 6 例+classify 1 例） |
 | §12.2 B 生产 RPC 面 | 未 opt-in→无 seam→unknown（默认关闭，见 VERIFY §10 注） | opt-in→稳定 scratch 会话 id、选文本模型、AbortSignal 随提交 | 服务缺失→ensureScratchSession 返回 undefined→unknown | self-heal.test.mjs（seam 3 例） |
 | §12.2 B env 载荷 | disk=patched+runtime=dead→conflict false；§11 字段（status/files）不变 | disk=missing / disk=unknown（核心包缺失） | disk=patched+runtime=live→conflict true（§12.1 故事 1） | self-heal.test.mjs（env 4 例） |
 | §12.4-6 既有 CLI/路由用例零回归 | POST /fix-admission 3 例复跑全绿（applyAdmissionPatch 导出面未改） | — | — | server-routes.test.mjs（§11.5-6 行，本次未改动） |
 | §12.2 B client 三态渲染 | disk=patched+runtime=dead→✓；disk=missing→⚠+一键修复 | runtime=unknown→中性「已写入磁盘——运行时状态未验证」（不冒充 ✓） | disk=patched+runtime=live→⚠「已修复磁盘，重启后生效」 | client-static.test.mjs 既有静态断言（本次未改动）+ VERIFY §10 人工验收 |
+| §12.2 B client | client-static 断言:admissionLive/admissionUnverified/savedFlash 渲染+admissionOk 严格判定 | i18n en/zh 四键 | — |
