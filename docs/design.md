@@ -467,7 +467,7 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | plugins/dsh-vision-bridge/lib/client.js | 修改 | 体检区准入行三态文案(✓/⚠已修待重启/⚠未修) |
 | plugins/dsh-vision-bridge/tests/self-heal.test.mjs | 新增 | 自愈+探针单测 |
 | plugins/dsh-vision-bridge/tests/TEST-MATRIX.md | 修改 | §12 映射行 |
-| plugins/dsh-vision-bridge/docs/VERIFY.md | 修改 | §10 人工验收清单(§12.4 映射,补齐 §10.5/§11.5 同款模式) |
+| docs/VERIFY.md | 修改 | §10 人工验收清单(§12.4 映射,补齐 §10.5/§11.5 同款模式) |
 | 安装副本同步 | 操作 | robocopy;**不强制重启**(用户任务运行中;自愈在下次自然重启生效) |
 
 ### 12.4 验收标准(映射 VERIFY §10)
