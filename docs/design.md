@@ -418,66 +418,86 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 8 | 🟡 | 〔用户反馈〕Provider 联动读不到 settings.yaml 的 baseURL 就留空(zai/minimax 等内置 URL provider 不可用)。修订:server 增 readCatalogBaseUrls()——扫 node_modules/@earendil-works/pi-ai/dist/providers/*.js 提取内置 baseUrl;/anthropic 尾缀(Anthropic 协议面)改写为同主机 /v1(OpenAI 面,活体验证 404→200);settings.yaml 显式值仍优先 | 已实现;M0-1 的 PARTIAL 降级就此升级为 catalog 补全 |
 | 9 | 🔵 | 〔用户反馈〕保存成功提示不明显。修订:save() 成功后 4 秒绿色「✓ 已保存」徽章(savedAt/savedFlash) | 已实现 |
 
-## 12. 准入补丁启动自愈(2026-09-09 增订,经用户确认)
+## 12. 准入补丁启动自愈(2026-09-09 增订;R1 评审后修订 v2)
 
-> 背景:9/8 DSH 核心包更新冲掉准入补丁(§5.4)→ 9/9 用户贴图被拒半日,诊断+「一键修复」+重启才恢复。用户定论:「能不能一次做好」——修复动作自动化到启动时,DSH 更新后的首次启动即自动恢复,不再依赖用户记得点按钮/跑脚本/读日志。
+> 背景:9/8 DSH 核心包更新冲掉准入补丁(§5.4)→ 9/9 用户贴图被拒半日,诊断+「一键修复」+重启才恢复。用户定论:「能不能一次做好」——修复动作自动化到启动时。
+> 〔R1 评审 #1 修订〕原 v1 预设「自愈恰在加载前生效」——**实证否决**:cordis EntryGroup.update 以 Promise.allSettled 并发挂载全部条目(cordis-plugin-loader/lib/index.js:97),session-controller(web-app bundle 条目)与 vision-bridge(profile bundle 条目)的 import/apply 竞速,**顺序无保证**;且 ESM 同进程动态 import 命中命名空间缓存(实测 m1===m2),模块一旦加载无法从外部判读其版本。故 v2 诚实重定范围:**自愈保证磁盘态与下一次启动干净;当次启动可能仍运行陈旧闸**——并以**运行时行为探针**(非磁盘标记)向用户暴露真实状态。
+
+### 12.0 运行时事实(R1 评审要求,新增)
+
+1. **挂载并发无序**:cordis loader EntryGroup.update → Promise.allSettled(config.map(options => this.create(options)))(cordis-plugin-loader/lib/index.js:97);create→import→apply 全条目竞速。dsh-base patch 头注原文 `Row order carries no load semantics (activation is service-availability driven)`;session-controller 是 dsh-web-app bundle 条目、vision-bridge 是 profile bundles[2]——import 顺序不保证。
+2. **ESM 模块缓存**:同进程对同一 URL 的 import() 返回同一命名空间对象(实测);commands.js 一旦被 web-app bundle 先加载,后续 import 均取缓存实例,无法从插件侧判读其内存版本(补丁标记是代码注释,非导出)。
+3. **闸代码求值时机**:两文件的补丁行在模块 import 时求值;文件替换后,已加载进程保持旧逻辑直至重启(9/9 事故 14:56 拒绝+15:02 补丁+15:29 重启恢复完整实证)。
+4. **行为探针可行面**:运行中闸是否活,可经服务端发起一次合成提交观测——对文本模型会话经 session/prompt RPC 提交带图消息,拒绝码 MODEL_DOES_NOT_SUPPORT_IMAGES=闸活;入账=闸死。成本:一次 RPC+1×1 PNG(零 VLM 调用,闸在 LLM 之前拦截)。scratch 会话可复用。
 
 ### 12.1 需求(三层)
 
-**总目标**:DSH 每次启动时,插件自动检测准入闸(§5.4 两文件)是否带补丁标记,未带则自动重打(幂等,.bak 兜底)——把「DSH 更新冲掉补丁」从事故降级为无感自愈。
+**总目标〔v2 修订〕**:DSH 每次启动时,插件自动检测准入闸磁盘标记,未带则自动重打(幂,.bak 兜底)——**保证下一次启动干净**;当次启动因并发加载顺序可能仍运行陈旧闸,插件以**运行时行为探针**在环境体检区暴露真实状态(「运行中:闸已失效/闸仍生效(重启后恢复)」),用户零猜测。
 
 **功能用户故事**:
-1. 作为用户,DSH 更新后第一次启动,插件自动重打准入补丁并记一行日志(`[vision-bridge] admission gate re-patched after update`)——我不需要知道补丁存在。
-2. 作为用户,补丁已在时启动**零额外动作零日志噪音**(幂等静默通过)。
-3. 作为用户,自愈失败(文件只读/权限/路径变)时插件**不崩**——记 error 日志 + 环境体检区显示「准入补丁 ⚠ 修复失败」,「一键修复」按钮仍在(手动兜底)。
-4. 作为运维,patch 脚本 CLI 入口与 `applyAdmissionPatch()` API 行为不变(§11.4 已交付的导出面零破坏)。
+1. 作为用户,DSH 更新后的首次启动:自愈重打补丁(1 行日志);**若当次加载顺序不利**(闸仍活),体检区明确「⚠ 准入闸运行中仍生效——已修复磁盘,重启后恢复」,而非静默假装好了。
+2. 作为用户,补丁已在且加载顺序有利(常态):启动零额外动作零日志噪音,体检区 ✓。
+3. 作为用户,自愈失败:插件不崩——error 日志+体检区 ⚠+「一键修复」兜底。
+4. 作为运维,patch 脚本 CLI 与 pplyAdmissionPatch() API 行为不变(§11.4 导出面零破坏)。
+5. 作为用户,体检区「准入补丁」行反映**运行时真相**(行为探针),非磁盘标记——9/9 事故核心误导源(UI 回显≠服务端真相)就此根除。
 
-**非功能**:自愈只在启动时跑一次(非 watch/轮询);写文件走既有 `applyAdmissionPatch`(原子写+.bak 已内建);失败永不阻塞插件启动(try/catch 包裹);零新依赖;不改 `vision-bridge` 命名空间 schema。
+**非功能**:自愈每次 apply() 入口至多一次(幂等零写,v2 措辞修正——apply 会随 fiber 重入);写文件走既有 applyAdmissionPatch(原子写+.bak 内建);失败永不阻塞启动;零新依赖;不改 vision-bridge schema;行为探针仅在 env 路由被调时执行(挂载首次+用户点重新检测),无后台轮询。
 
 ### 12.2 方案
 
-- **挂载点**:`lib/index.js` apply() 内,settings 注册之后、其他初始化之前,加一步 `selfHealAdmissionGate()`:
-  - 复用 `scripts/patch-admission-gate.mjs` 的 `applyAdmissionPatch({nodeModulesDir, logger})`(§11.4 已导出;幂等——已带 marker 的文件直接跳过返回 false)
-  - `nodeModulesDir` 派生:与 server-routes 同源(§11.2-6 的 dshHome→profiles/web/node_modules 链路;插件根 `../..` 相对推导为主、DSH_HOME env 为辅——与 patch 脚本 FIX#7 同款双源)
-  - 日志:重打成功=1 行 info;已在=静默;失败=1 行 error(不抛)
-- **环境体检联动**:server-routes 的 `/vision-bridge/env` 已有 `detectAdmissionPatch`(读 marker)——自愈在启动先跑,env 路由的检测自然反映自愈结果;自愈失败时 env 显示 ⚠ +「一键修复」按钮照旧可用(第三道兜底)。
-- **与「一键修复」按钮的关系**:完全正交——按钮调同款 `applyAdmissionPatch`,自愈只是把同一动作搬到启动时。按钮保留(自愈失败后的手动路径)。
-- **时序安全**:apply() 在 DSH 启动序列内跑;patch 目标(session-controller 两文件)是宿主代码,启动时已存在于盘上(包安装先于插件加载);写入对运行中进程无影响(下次加载才生效——与「一键修复需重启」同语义,但时机对齐到启动 = 恰好是加载前的最后窗口)。
+- **A. 磁盘自愈**:lib/index.js apply() 内、settings 注册之后,加 selfHealAdmissionGate():
+  - 复用 pplyAdmissionPatch({nodeModulesDir, logger})(§11.4 导出;幂等。注:§11.4 表早期写作 applyPatch,§11.8 未记录更名——本节统一以实际导出符号 applyAdmissionPatch 为准,§11.4 行随本次修订一并更正)
+  - nodeModulesDir 双源:插件根 ../.. 相对推导为主、DSH_HOME env(→profiles/web/node_modules)为辅(与 patch 脚本 DEFAULT_NM 的 DSH_HOME 推导同款逻辑,原「FIX#7」悬空引用就此自述)
+  - 日志:重打成功=1 行 info(`[vision-bridge] admission gate re-patched after update (effective on next boot)`);已在=静默;失败=1 行 error(不抛)
+- **B. 运行时行为探针**〔v2 新增〕:server-routes.js 的 /vision-bridge/env 准入项升级两态合并:
+  - 磁盘态:detectAdmissionPatch(既有)
+  - 运行态(新增 probeAdmissionGate()):经插件注入的 RPC 面向 scratch 会话提交 1×1 PNG 合成消息,观测拒绝码——MODEL_DOES_NOT_SUPPORT_IMAGES=gate-live;入账(即刻删除测试消息,scratch 会话复用)=gate-dead;agent-busy/其他=unknown(不误报)
+  - env 返回 {admission:{disk,runtime}}:disk=patched & runtime=dead → ✓;disk=patched & runtime=live → **⚠「已修复磁盘,重启后生效」**(9/9 场景的显式信号);disk=missing → ⚠+一键修复
+  - 探针节流:仅 env 路由被调时执行,无后台轮询
+- **C. 与「一键修复」按钮的关系**:正交不变——按钮修磁盘;自愈把同一动作搬到启动;探针告知用户还差不差重启(既有 fixApplied 文案即「已应用,重启后生效」,无需改)。
+- **D. 时序声明〔v2 诚实化〕**:自愈修复磁盘,不保证当次启动生效(§12.0-1/2);当次真实状态由 B 探针暴露。「下一次启动必然干净」是硬承诺(磁盘幂等+启动重打组合)。
 
 ### 12.3 受影响文件清单
 
 | 文件 | 动作 | 职责 |
-|---|---|--- |
-| `plugins/dsh-vision-bridge/lib/index.js` | 修改 | apply() 加 selfHealAdmissionGate 调用(约 +20 行,含 try/catch 与日志) |
-| `plugins/dsh-vision-bridge/scripts/patch-admission-gate.mjs` | 不变 | applyAdmissionPatch 导出面已就绪(零改动) |
-| `plugins/dsh-vision-bridge/lib/server-routes.js` | 不变 | env 检测/一键修复路由已就绪 |
-| `plugins/dsh-vision-bridge/tests/self-heal.test.mjs` | 新增 | 自愈挂载单测 |
-| `plugins/dsh-vision-bridge/tests/TEST-MATRIX.md` | 修改 | §12 映射行 |
-| 安装副本同步+重启 | 操作 | robocopy → **用户安排的下次重启**(不强制;自愈在下下次启动自然生效) |
+|---|---|---|
+| plugins/dsh-vision-bridge/lib/index.js | 修改 | apply() 加 selfHealAdmissionGate(约+25 行,含 try/catch 与日志) |
+| plugins/dsh-vision-bridge/lib/server-routes.js | 修改 | env 准入项两态升级(disk+runtime 探针 probeAdmissionGate,scratch 合成提交+清理) |
+| plugins/dsh-vision-bridge/scripts/patch-admission-gate.mjs | 不变 | applyAdmissionPatch 导出面已就绪 |
+| plugins/dsh-vision-bridge/lib/client.js | 修改 | 体检区准入行三态文案(✓/⚠已修待重启/⚠未修) |
+| plugins/dsh-vision-bridge/tests/self-heal.test.mjs | 新增 | 自愈+探针单测 |
+| plugins/dsh-vision-bridge/tests/TEST-MATRIX.md | 修改 | §12 映射行 |
+| plugins/dsh-vision-bridge/docs/VERIFY.md | 修改 | §10 人工验收清单(§12.4 映射,补齐 §10.5/§11.5 同款模式) |
+| 安装副本同步 | 操作 | robocopy;**不强制重启**(用户任务运行中;自愈在下次自然重启生效) |
 
-### 12.4 验收标准
+### 12.4 验收标准(映射 VERIFY §10)
 
-1. 盘上补丁在:启动 → 零日志噪音、零文件触碰(mtime 不变)。
-2. 盘上补丁失(模拟:换入干净 .bak 内容):启动 → 一行 info 日志 + 文件重打(带 .bak)+ 环境体检显示 ✓。
-3. 自愈失败(模拟:只读目录):插件照常启动(无 crash),error 日志一行,体检区 ⚠ + 一键修复可用。
-4. `node --test` 全绿(含新增 self-heal 用例)。
-5. patch 脚本 CLI 直跑行为不变(既有 3 用例不回归)。
+1. 磁盘补丁在:启动→零日志噪音零文件触碰(mtime 不变);env disk=patched;探针 runtime=dead→体检 ✓。
+2. 磁盘补丁失(换入干净 .bak):重启→一行 info+文件重打(带 .bak)+env disk=patched;**端到端**:同一次重启后的文本模型会话贴图入账(无 MODEL_DOES_NOT_SUPPORT_IMAGES)——R1 #1(b)「单次重启即愈」验收;若加载顺序不利(runtime=live),体检区明确「已修磁盘,重启后生效」,再重启一次后 runtime=dead(两跳上限,用户全程知情)。
+3. 自愈失败(单测 stub applyAdmissionPatch reject 模拟——Windows 目录只读属性不可靠故弃用):插件照常启动,error 日志一行,体检区 ⚠+一键修复可用。
+4. 探针各态:入账→dead;拒绝码→live;agent-busy/异常→unknown(不误报)。
+5. `node --test` 全绿(含新增 self-heal 用例)。
+6. patch 脚本 CLI 直跑行为不变(既有 3 用例不回归)。
 
 ### 12.5 测试矩阵增补
 
 | 验收条 | 正常 | 边界 | 错误 |
 |---|---|---|---|
-| §12.4-1 | 已打补丁目录 → selfHeal 返回 already,零写 | — | — |
-| §12.4-2 | 干净文件 → selfHeal 调 applyAdmissionPatch 一次,marker 落盘 | 两文件一有一无 → 只补缺的那个 | — |
-| §12.4-3 | 只读目录 → 抛错被捕获,error 日志,返回 failed | nodeModulesDir 不存在 → 同 | — |
-| §12.4-5 | 既有 CLI 用例复跑全绿 | — | — |
+| §12.4-1 | 已打补丁目录→selfHeal 返回 already,零写零日志 | fiber 重入 apply()→幂等(缓存结果) | — |
+| §12.4-2 | 干净文件→selfHeal 调 applyAdmissionPatch 一次,marker 落盘 | 两文件一有一无→只补缺的 | — |
+| §12.4-3 | stub applyAdmissionPatch reject→捕获,error 日志,返回 failed | nodeModulesDir 不存在→同 | — |
+| §12.4-4 | 探针:入账→dead;拒绝码→live | agent-busy→unknown;scratch 会话缺失→建新 | 探针异常→unknown(不误报) |
+| §12.4-6 | 既有 CLI 用例复跑全绿 | — | — |
 
 ### 12.6 风险登记(本章增补)
 
 | # | 级别 | 风险 | 缓解 |
 |---|---|---|---|
-| 17 | 🟡 | 启动自愈写宿主 node_modules,在沙箱/受限环境可能无权限 | try/catch 静默降级+体检区可见;与「一键修复」同权限面,无新增风险 |
-| 18 | 🔵 | DSH 未来重构移走 session-controller 两文件 | applyAdmissionPatch 已容忍缺文件(返回 not-found 态);自愈照旧静默不崩 |
+| 17 | 🟡 | 启动自愈写宿主 node_modules,沙箱/受限环境可能无权限 | try/catch 静默降级+体检区可见;与「一键修复」同权限面,无新增风险 |
+| 18 | 🔵 | DSH 未来重构移走 session-controller 两文件 | applyAdmissionPatch 已容忍缺文件(not-found 态);自愈照旧静默不崩 |
+| 19 | 🟡〔R1 v2〕 | **加载顺序不利时当次启动闸仍活**(§12.0-1 并发竞速) | 行为探针显式暴露「已修磁盘,重启后生效」;硬承诺「下一次启动干净」;最坏两跳且用户知情(v1 的静默单跳假象消除) |
+| 20 | 🔵〔R1 v2〕 | 行为探针的合成提交在 scratch 会话留脏 | 探针成功路径即刻删除测试消息;scratch 会话非用户主用;失败路径无落盘(被拒即无消息) |
+
 
 ## 附录 A:架构评审报告(全文)
 
