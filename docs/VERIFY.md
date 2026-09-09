@@ -158,3 +158,13 @@
 - 真实调用冒烟：设置 `VISION_BRIDGE_SMOKE=1`、`VISION_BRIDGE_SMOKE_BASEURL`、`VISION_BRIDGE_SMOKE_MODEL`、
   `VISION_BRIDGE_SMOKE_KEY` 后运行 `node --test tests/smoke.test.mjs`。
 - 用例 × 验收映射：`tests/TEST-MATRIX.md`。
+## 10. 启动自愈 + 行为探针(2026-09-09 增订,design §12)
+
+> 前置:§12 交付后 robocopy 同步安装副本。自愈在下次 DSH 重启时生效(不强制重启;探针在设置卡片被打开时即时可用)。
+
+1. 磁盘补丁在 + 正常启动:boot 日志零 vision-bridge 补丁行;env 探针 runtime=dead;体检区 ✓「准入补丁已生效」。
+2. 磁盘补丁失(换入干净 .bak 再重启):boot 日志一行 [vision-bridge] admission gate re-patched after update;env disk=patched;同次重启内文本模型会话贴图入账(端到端)。若 runtime=live:体检区显示「⚠ 已修复磁盘,重启后生效」。
+3. 自愈失败(stub 拒绝单测模拟):插件照常启动零 crash;体检区 ⚠ + 一键修复按钮可用。
+4. 探针三态:入账=dead;拒绝码=live;agent-busy/异常=unknown(不误报)。
+5. 
+ode --test 全绿;patch 脚本 CLI 既有用例零回归。
