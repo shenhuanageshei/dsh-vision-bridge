@@ -153,18 +153,20 @@
 
 ## 附：自动化测试
 
-- 插件根：`node --test`（296 用例、零失败；vendor 引擎库 108 例 + 插件层 188 例——其中 §11 增补 client 静态 16 例
-  （client-static 总 30）、服务端路由 46 例；§10 前基线 234 例）。
+- 插件根：`node --test`（318 用例、零失败；vendor 引擎库 108 例 + 插件层 210 例——其中 §11 增补 client 静态 16 例
+  （client-static 总 30）、服务端路由 46 例、§12 增补 self-heal 22 例；§10 前基线 234 例、§12 前基线 296 例）。
 - 真实调用冒烟：设置 `VISION_BRIDGE_SMOKE=1`、`VISION_BRIDGE_SMOKE_BASEURL`、`VISION_BRIDGE_SMOKE_MODEL`、
   `VISION_BRIDGE_SMOKE_KEY` 后运行 `node --test tests/smoke.test.mjs`。
 - 用例 × 验收映射：`tests/TEST-MATRIX.md`。
 ## 10. 启动自愈 + 行为探针(2026-09-09 增订,design §12)
 
 > 前置:§12 交付后 robocopy 同步安装副本。自愈在下次 DSH 重启时生效(不强制重启;探针在设置卡片被打开时即时可用)。
+>
+> **〔2026-09-09 交付注:运行时探针的生产接线状态〕** design §12.2 B 设想探针经「插件注入的 RPC 面」提交合成消息。实证该面**存在,但不在顶层 inject 清单内**:宿主服务 `ctx.get('sessionController')` 暴露 `prompt(request, signal)`(`dsh-api-session-controller/lib/index.js:2772-2775`;服务名注册见同文件 `:2598`)与 `create({sessionId})`(`:2707`,幂等采纳)。本交付按任务硬约束 2(「不要真调 session/prompt」)**默认不接线**:未接线时探针返回 `runtime=unknown`,体检区显示中性「准入补丁已写入磁盘——运行时状态未验证」,而**不冒充 ✓**。三态行为由单测 stub 全覆盖(`tests/self-heal.test.mjs`;§12.5 映射见 `tests/TEST-MATRIX.md`)。
+> **要在活体上验证三态**:启动 DSH web 前设 `VISION_BRIDGE_ADMISSION_PROBE=1`(env 变量,非 schema 字段)。此时探针经真实 RPC 面提交 1×1 PNG:闸活→拒绝码→`live`;闸死→入账→`dead`(并触发 cleanup seam;宿主无「删除会话消息」API,scratch 会话 `session-vision-bridge-admission-probe` 会留一条合成消息,§12.6-20 已登记该残留)。移除该变量即回默认关闭。
 
-1. 磁盘补丁在 + 正常启动:boot 日志零 vision-bridge 补丁行;env 探针 runtime=dead;体检区 ✓「准入补丁已生效」。
-2. 磁盘补丁失(换入干净 .bak 再重启):boot 日志一行 [vision-bridge] admission gate re-patched after update;env disk=patched;同次重启内文本模型会话贴图入账(端到端)。若 runtime=live:体检区显示「⚠ 已修复磁盘,重启后生效」。
+1. 磁盘补丁在 + 正常启动:boot 日志零 vision-bridge 补丁行;env `disk=patched`;探针 `runtime=dead`(需上面的 opt-in)时体检区 ✓「准入补丁已生效」;未 opt-in 时中性「运行时状态未验证」。
+2. 磁盘补丁失(换入干净 .bak 再重启):boot 日志一行 `[vision-bridge] admission gate re-patched after update (effective on next boot)`;env `disk=patched`;同次重启内文本模型会话贴图入账(端到端)。若探针报 `runtime=live`:体检区显示「⚠ 已修复磁盘,重启后生效」(`admission.conflict=true`),再重启一次后 `runtime=dead`。
 3. 自愈失败(stub 拒绝单测模拟):插件照常启动零 crash;体检区 ⚠ + 一键修复按钮可用。
-4. 探针三态:入账=dead;拒绝码=live;agent-busy/异常=unknown(不误报)。
-5. 
-node --test 全绿;patch 脚本 CLI 既有用例零回归。
+4. 探针三态:入账=`dead`;拒绝码=`live`;agent-busy/异常/超时=`unknown`(不误报)。
+5. `node --test` 全绿;patch 脚本 CLI 既有用例零回归。
