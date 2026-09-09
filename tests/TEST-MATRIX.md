@@ -50,3 +50,17 @@
 | §11.5-6 modlens 检测 | 未安装+404→✓（无冲突） | 装了+404→✓；探测抛错→unknown 无冲突；config 源失败→env 仍 200 | 装了+200→conflict ⚠ | server-routes.test.mjs（env modlens 4 例） |
 | §11.5-6 一键关闭 modlens | POST /fix-modlens → 追加 override 行、原行保留、applied+needsRestart | 幂等：二次调用字节级不变→alreadyPatched；已有手写 override 行→跳过 | 非列表文档（列 0 映射键）→500 原文不动（风险#14）；不可读→500；路径未配置→500；非 POST→405 | server-routes.test.mjs（fix-modlens 7 例，mkdtemp 临时 cordis.patch.yml，绝不触碰真实 `<PROFILE_PATCH>`） |
 | client 静态断言（§11.6 client 行） | 三组结构/provider 联动函数/凭证三形态控件/体检区（envGroup/refreshEnv/runFix/说明折叠/全✓折叠）/pendingApiKey 调用/卡标题 cardTitle | — | — | client-static.test.mjs（§11 三 describe 16 例+manifest 4 包断言） |
+
+## §12 准入补丁启动自愈 + 运行时行为探针映射（2026-09-09 增订；活体验收=VERIFY §10）
+
+| 验收/故事 | 正常 | 边界 | 错误 | 用例（文件） |
+|---|---|---|---|---|
+| §12.4-1 补丁已在→零噪音零写 | 已打补丁目录→selfHeal 返回 already，两文件 skipped，mtime 不变、零日志 | fiber 重入 apply()→同一 dir 复用缓存 promise（一次修复调用）；apply() 自身跑过一次后缓存命中 | — | self-heal.test.mjs（already/缓存/apply 缓存 3 例） |
+| §12.4-2 补丁失→自动重打 | 干净文件→applyAdmissionPatch 落 marker+.bak，1 行 info 且含 `(effective on next boot)` | 两文件一有一无→只补缺的（skipped+patched） | — | self-heal.test.mjs（patched/部分 2 例） |
+| §12.4-3 自愈失败不阻塞启动 | — | nodeModulesDir 不存在→failed（两文件 error），不抛 | stub applyAdmissionPatch reject→捕获、恰 1 行 error、status failed | self-heal.test.mjs（reject/缺失目录 2 例） |
+| §12.2 A nodeModulesDir 双源 | 插件 `../..` 命中核心包→用它（安装副本=node_modules 本身） | 无核心包→DSH_HOME 推导；DSH_HOME 未设→主推导兜底 | — | self-heal.test.mjs（resolveNodeModulesDir 1 例） |
+| §12.4-4 探针三态 | 入账→dead（并调用 cleanup seam）；拒绝码 MODEL_DOES_NOT_SUPPORT_IMAGES→live | 无 RPC 面/无 scratch 会话→unknown 且零提交；cleanup 抛错不改判 | agent-busy/其它异常/超时→unknown（不误报）；classifyAdmissionProbeError 直测 | self-heal.test.mjs（probe 7 例+classify 1 例） |
+| §12.2 B 生产 RPC 面 | 未 opt-in→无 seam→unknown（默认关闭，见 VERIFY §10 注） | opt-in→稳定 scratch 会话 id、选文本模型、AbortSignal 随提交 | 服务缺失→ensureScratchSession 返回 undefined→unknown | self-heal.test.mjs（seam 3 例） |
+| §12.2 B env 载荷 | disk=patched+runtime=dead→conflict false；§11 字段（status/files）不变 | disk=missing / disk=unknown（核心包缺失） | disk=patched+runtime=live→conflict true（§12.1 故事 1） | self-heal.test.mjs（env 4 例） |
+| §12.4-6 既有 CLI/路由用例零回归 | POST /fix-admission 3 例复跑全绿（applyAdmissionPatch 导出面未改） | — | — | server-routes.test.mjs（§11.5-6 行，本次未改动） |
+| §12.2 B client 三态渲染 | disk=patched+runtime=dead→✓；disk=missing→⚠+一键修复 | runtime=unknown→中性「已写入磁盘——运行时状态未验证」（不冒充 ✓） | disk=patched+runtime=live→⚠「已修复磁盘，重启后生效」 | client-static.test.mjs 既有静态断言（本次未改动）+ VERIFY §10 人工验收 |
