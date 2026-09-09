@@ -47,7 +47,7 @@
 1. 在文本-only 模型会话中，**直接 Ctrl+V 粘贴截图**（或回形针附图）并发问"报错信息是什么？"。
    依据：本部署已对服务端准入打本地补丁（`scripts/patch-admission-gate.mjs`，带 .bak 备份）——准入不再按当前模型拒图；
    图片照常入账，请求时由运行时投影为占位符，进入桥的 tool 模式。
-   **DSH 更新后若验收 §2 失败，先重跑该脚本再重启**（核心包更新会覆盖补丁）。
+   **DSH 更新后若验收 §2 失败，先重跑该脚本再重启**（核心包更新会覆盖补丁）〔2026-09-09 勘误:§12 启动自愈已自动化此动作,重启即自检重打;手动重跑仅作自愈失败后的兜底〕。
 2. 预期：模型看到占位符后调用 `vision_bridge_read`（ref=8-hex）→ 返回带
    `[UNTRUSTED EVIDENCE …]` 头的结构化描述（image_overview/visible_text/objects_and_layout/user_request_answer…）。
 3. 模型依据描述正确回答原问题。
