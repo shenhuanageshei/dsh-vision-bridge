@@ -497,6 +497,18 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 18 | 🔵 | DSH 未来重构移走 session-controller 两文件 | applyAdmissionPatch 已容忍缺文件(not-found 态);自愈照旧静默不崩 |
 | 19 | 🟡〔R1 v2〕 | **加载顺序不利时当次启动闸仍活**(§12.0-1 并发竞速) | 行为探针显式暴露「已修磁盘,重启后生效」;硬承诺「下一次启动干净」;最坏两跳且用户知情(v1 的静默单跳假象消除) |
 | 20 | 🔵〔R1 v2〕 | 行为探针的合成提交在 scratch 会话留脏 | 探针成功路径即刻删除测试消息;scratch 会话非用户主用;失败路径无落盘(被拒即无消息) |
+### 12.8 交付偏差记录(2026-09-09,交付审计+代码评审定案)
+
+| # | 级别 | 偏差 | 处置 |
+|---|---|---|---|
+| 1 | 🟡 | 生产探针 seam 默认**不接线**(任务硬约束「不要真调 session/prompt」):uildAdmissionProbeDeps 完整实现但由 VISION_BRIDGE_ADMISSION_PROBE=1 显式开启;默认 env 返回 runtime=unknown | 定案:opt-in 契约;宿主无消息删除 API(全量检索实证),cleanup seam 生产留空,scratch 残留按 §12.6-20 登记;§12.2 B「经插件注入的 RPC 面」读作「经 opt-in env 开关启用的 RPC 面」 |
+| 2 | 🟡 | 衍生副作用(审计 M-1):默认 unknown → allOk 恒 false →「全✓ envReady 折叠态」默认不可达,体检区永远展开 | 定案(用户裁决):接受为 opt-in 契约的一部分——接线后 envReady 自然恢复;VERIFY §10-1 已声明标签层面,本行补记折叠层面 |
+| 3 | 🟡 | 测试隔离(代码评审 #4/审计 M-2):apply() 自愈走默认真实目录 | 已修:resolveNodeModulesDir 增 VISION_BRIDGE_SELF_HEAL_NM 测试覆盖 env;self-heal 单测钉临时目录,永不触真实宿主 |
+| 4 | 🟡 | 探针假 dead 边界(代码评审 #3):scratch 无法钉文本模型时仍返回 sessionId | 已修:target 缺失或 selectModel 不可用 → 返回 undefined → runtime=unknown(诚实不误报) |
+| 5 | 🟡 | savedFlash 管线存在但渲染缺失(代码评审 #1)——§11.8-9 记录「已实现」与实际不符 | 已修:render 层消费 state.savedFlash 渲染绿色徽章 + en/zh i18n key;client-static 断言补齐 |
+| 6 | 🔵 | 死代码:credential conflict 分支+误导文案(§11.8-6 修订后不可达) | 已删:分支与两处 i18n 文案移除 |
+| 7 | 🔵 | readCatalogBaseUrls 插在 projectProviders 的 JSDoc 与定义之间(文档错位) | 已修:JSDoc 移回各自函数前 |
+| 8 | 🔵 | client 四态无自动断言;TEST-MATRIX probe 计数虚 1 | 已修:client-static 增 admission four-state 断言组(319 例含);矩阵计数更正 |
 
 
 ## 附录 A:架构评审报告(全文)

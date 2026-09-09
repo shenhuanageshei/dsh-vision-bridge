@@ -188,6 +188,12 @@ describe('lib/client.js — §11 connectivity probe and environment panel', () =
     assert.ok(clientSrc.includes('state.test.status === "testing"'));
   });
 
+  it('renders the admission four-state rows (§12.2 B client, review #2)', () => {
+    assert.ok(clientSrc.includes('admissionLive'), 'live-state label key exists');
+    assert.ok(clientSrc.includes('admissionUnverified'), 'unverified-state label key exists');
+    assert.ok(clientSrc.includes('savedFlash'), 'save-flash badge is rendered (§11.8-9 review #1)');
+    assert.ok(clientSrc.includes('const admissionOk = admission?.disk === "patched" && admission?.runtime === "dead"'), 'strict ok gate: disk+runtime both required');
+  });
   it('renders the environment check panel with a re-check control (§11.3E)', () => {
     assert.ok(clientSrc.includes('function envGroup()'));
     assert.ok(clientSrc.includes('async refreshEnv()'));

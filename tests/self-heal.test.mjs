@@ -184,6 +184,11 @@ describe('§12.2 A — startup self-heal of the admission gate', () => {
     const cacheDir = makeDir();
     const ctx = makeFakeCtx();
     resetSelfHealCache();
+    // Hermetic (review #4 / audit M-2): pin the self-heal scan to a temp
+    // directory so the test can never touch the real host node_modules,
+    // regardless of the machine's patch state.
+    const previousNm = process.env.VISION_BRIDGE_SELF_HEAL_NM;
+    process.env.VISION_BRIDGE_SELF_HEAL_NM = join(cacheDir, 'nm');
     const disposer = await apply(ctx, {
       provider: { baseURL: 'https://api.example.com/v1', model: 'vl' },
       credential: 'VISION_API_KEY',
@@ -198,6 +203,8 @@ describe('§12.2 A — startup self-heal of the admission gate', () => {
     assert.ok(['already', 'patched', 'failed'].includes(result.status));
     await disposer();
     resetSelfHealCache();
+    if (previousNm === undefined) delete process.env.VISION_BRIDGE_SELF_HEAL_NM;
+    else process.env.VISION_BRIDGE_SELF_HEAL_NM = previousNm;
   });
 });
 
