@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
+import { plainSection } from './_plain-section.mjs';
 import {
   ADMISSION_PROBE_SESSION_ID,
   admissionProbeEnabled,
@@ -446,7 +447,8 @@ function makeFakeCtx() {
     settings: {
       register(ns, schema, options = {}) {
         const state = { user: {}, watchers: [] };
-        const resolved = () => schema({ ...(options.base ?? {}), ...state.user });
+        // A 0.1.6 handle hands over plain values (see _plain-section.mjs).
+        const resolved = () => plainSection(schema({ ...(options.base ?? {}), ...state.user }));
         const scope = {
           get: resolved,
           watch(cb) { state.watchers.push(cb); return () => {}; },

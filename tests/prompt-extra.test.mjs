@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
 import { Config, configFingerprint, resolveConfig } from '../lib/config.js';
+import { plainSection } from './_plain-section.mjs';
 
 // Stage §10 tests: promptExtra schema default / trim normalization / length
 // and lone-surrogate rejection / fingerprint participation / the single
@@ -42,7 +43,7 @@ afterEach(() => {
 
 describe('promptExtra schema + resolveConfig', () => {
   it('schema defaults to an empty string', () => {
-    assert.equal(Config({}).promptExtra, '');
+    assert.equal(plainSection(Config({})).promptExtra, '');
   });
 
   it('resolveConfig defaults to empty when the field is absent (no behavior change)', () => {
@@ -109,7 +110,8 @@ function makeFakeCtx() {
     settings: {
       register(ns, schema, options = {}) {
         const state = { user: {}, watchers: [] };
-        const resolved = () => schema({ ...(options.base ?? {}), ...state.user });
+        // A 0.1.6 handle hands over plain values (see _plain-section.mjs).
+        const resolved = () => plainSection(schema({ ...(options.base ?? {}), ...state.user }));
         const scope = { get: resolved, watch(cb) { state.watchers.push(cb); return () => {}; } };
         options.validate?.(resolved());
         return scope;

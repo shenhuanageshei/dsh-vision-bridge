@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { apply, ensureFrozenDefaults } from '../lib/index.js';
+import { plainSection } from './_plain-section.mjs';
 
 const tmpDirs = [];
 function makeDir() {
@@ -29,7 +30,8 @@ function makeFakeCtx({ credential = { value: 'sk-test', source: 'env' }, fetchBo
     settings: {
       register(ns, schema, options = {}) {
         const state = { user: {}, watchers: [] };
-        const resolved = () => schema({ ...(options.base ?? {}), ...state.user });
+        // A 0.1.6 handle hands over plain values (see _plain-section.mjs).
+        const resolved = () => plainSection(schema({ ...(options.base ?? {}), ...state.user }));
         const scope = {
           get: resolved,
           watch(cb) { state.watchers.push(cb); return () => {}; },

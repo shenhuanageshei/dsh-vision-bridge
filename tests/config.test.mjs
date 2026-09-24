@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Config, BAKED_PROVIDER_DEFAULTS, configFingerprint, resolveConfig } from '../lib/config.js';
+import { plainSection } from './_plain-section.mjs';
 
 const FALLBACK = { persistDirFallback: 'D:/tmp/vb-cache' };
 
@@ -117,7 +118,7 @@ describe('configFingerprint', () => {
 
 describe('Config schema (settings-page surface)', () => {
   it('resolves a minimal section with defaults', () => {
-    const value = Config({});
+    const value = plainSection(Config({}));
     assert.equal(value.mode, 'both');
     assert.equal(value.credential, 'VISION_API_KEY');
     assert.deepEqual(value.visionCapabilities, { outputFormat: 'auto' });

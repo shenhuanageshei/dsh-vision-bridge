@@ -11,6 +11,8 @@ DeepSeek Harness 会话截图按模型能力自动分流 —— 多模态模型�
 
 对用户来说效果是：**截图随便发，任何模型都"看得见"**。
 
+**支持的内核代际**：DSH **0.1.6** 与 **0.1.7**（同一份代码双代兼容；两代差异见「设置」与「已知限制」）。
+
 ## 能力面
 
 | 工具/行为 | 说明 |
@@ -20,7 +22,10 @@ DeepSeek Harness 会话截图按模型能力自动分流 —— 多模态模型�
 
 多命中（8-hex 前缀碰撞）返回候选列表而非猜测；compaction/fork/resume 后旧截图仍可解析（原始日志 append-only）。
 
-## 设置（设置 → 插件 →「dsh-VisionBridge 视觉代读」卡片）
+## 设置（卡片位置随 DSH 代际变化）
+
+- **DSH 0.1.6**：设置 → 插件 →「dsh-VisionBridge 视觉代读」卡片。
+- **DSH 0.1.7**：内置插件 → 找到 `vision-bridge` 那一行 → **点进详情页** → 配置区（宿主在新内核只在行**详情页**渲染配置槽；列表页只显示描述文字，不出表单）。
 
 卡片三组布局（视觉引擎 / 触发与输出 / 高级折叠），支持：
 
@@ -34,7 +39,7 @@ DeepSeek Harness 会话截图按模型能力自动分流 —— 多模态模型�
 | 字段 | 说明 |
 |---|---|
 | mode | `tool` / `auto` / `both`（默认 both） |
-| provider.baseURL / model | 卡片可配；留空则首次运行从 dsh-vision-toolkit 拷贝并本地固化 |
+| provider.baseURL / model | 卡片可配；留空则首次运行从 dsh-vision-toolkit 拷贝并本地固化（0.1.7 上该插件通常不可用 ⇒ 回落到插件内置默认值） |
 | credential | DSH CredentialRef（默认 `VISION_API_KEY`） |
 | promptExtra | 附加指令（≤2000 字符，拼在代读请求尾部） |
 | 其余 | timeoutMs / concurrency / cache / maxImageBytes / maxImagePixels / visionCapabilities / language / autoMode.maxPerTurn —— 见 `docs/design.md` §5.7 |
@@ -56,6 +61,9 @@ DeepSeek Harness 会话截图按模型能力自动分流 —— 多模态模型�
 - **modlens 用户**：modlens 的粘贴接管与本品设计重叠（同为文本模型读图）。已装 modlens 时请在卡片体检区「一键关闭」其接管（或 profile patch 行 `pasteToPath: false`），否则贴图被它截走。modlens 其余能力（路径/URL 读图、全文 OCR）与本品分工并存。
 - **回合取消只覆盖附件读取**：取消时 `readImageRequest`（附件字节读取）即时中止；经引擎 `analyze()` 公开 API 的 VLM HTTP 调用与重试退避**不可取消**（`AnalyzeParams` 不收 signal，包装层无法把信号传入引擎内部的 `adapter.call`，受不改库源码约束）。上游库为 analyze 增加 signal 透传后可根治。
 - 8-hex 前缀为 32bit 空间，理论碰撞率低但非零；多命中时返回候选列表。
+- **卡片位置随内核代际变化**：0.1.6 在「设置 → 插件」，0.1.7 在「内置插件 → 插件行详情页」的配置区（见上「设置」）。
+- **0.1.6 客户端槽面未真机核验**：老代槽服务是否提供声明探测面与等声明面未验；若两者皆无，卡片将不挂载（留一条 warn），而改造前是直接注册老槽位。
+- **两个文件先于双代兼容批超 500 行参考线**：`lib/client.js` 1636 行、`lib/index.js` 571 行；拆分（客户端需先验两代 chunk 装载面）登记为后续工作。
 
 ## 文档
 

@@ -1,6 +1,6 @@
-# VERIFY — dsh-vision-bridge 人工验收清单（设计 §7 七条）
+# VERIFY — dsh-vision-bridge 人工验收清单
 
-权威依据：`docs/design.md` §7。
+权威依据：`docs/design.md`（插件长期设计）；双代兼容验收（§11）的依据由该节各条目自述。
 接线已写好但**本交付不重启 DSH web、不执行 profile pnpm install**——以下第 0 步完成后逐条人工验证。
 **〔2026-09-07 §10 交付注〕**设置界面交付（design §10）已用 robocopy /MIR（排除 .git、node_modules）把含 `lib/client.js`
 与新 `package.json`（`dsh.client` 声明）的源码同步到安装副本，**但未重启 DSH web**——重启 + 浏览器硬刷新 +
@@ -157,6 +157,10 @@
   （client-static 总 30）、服务端路由 46 例、§12 增补 self-heal 22 例；§10 前基线 234 例、§12 前基线 296 例）。
 - 真实调用冒烟：设置 `VISION_BRIDGE_SMOKE=1`、`VISION_BRIDGE_SMOKE_BASEURL`、`VISION_BRIDGE_SMOKE_MODEL`、
   `VISION_BRIDGE_SMOKE_KEY` 后运行 `node --test tests/smoke.test.mjs`。
+- **本批双代兼容（2026-09-24）**：插件根 `node --test`（插件层 267 例 + vendor 引擎库 108 例 = **375 用例、零失败**，基线 318 只增不减）；
+  新增 `tests/client-adapter.test.mjs` 24 例（假 `__ModuleLoader__` 捕获 def → 组件直调：槽梯/三态/写路径/凭证面/双语文案）；`client-static.test.mjs` 现 33 例；老用例零回归。
+  新增 `tests/dual-gen.test.mjs` 30 例（同批二轮补落）——服务端新分支自动覆盖：能力分派与守卫（§7-1/9、§7-5②）· 自愈前移行序（§7-8）· 0.1.7 引用装配与读法（§7-2/3）·
+  校验拦截与拒收保旧（§7-4）· 跨命名空间 `describe()` 读与 provider 投影（§2.1-18、§7-13）· 附件尺寸折算等价（§2.4，含 400 样本宿主活体对拍）。
 - 用例 × 验收映射：`tests/TEST-MATRIX.md`。
 ## 10. 启动自愈 + 行为探针(2026-09-09 增订,design §12)
 
@@ -170,3 +174,22 @@
 3. 自愈失败(stub 拒绝单测模拟):插件照常启动零 crash;体检区 ⚠ + 一键修复按钮可用。
 4. 探针三态:入账=`dead`;拒绝码=`live`;agent-busy/异常/超时=`unknown`(不误报)。
 5. `node --test` 全绿;patch 脚本 CLI 既有用例零回归。
+
+## 11. 双代兼容 DSH 0.1.6 / 0.1.7(2026-09-24 增订)
+
+> 前置:交付后 robocopy 同步安装副本(排除 .git/node_modules)→ `pnpm install` → **重启 DSH web**(0.1.7 上不重启则插件仍是"不激活"态)→ 浏览器硬刷新。
+> 本清单在 0.1.7 宿主上验证新面;0.1.6 侧以「老路径原样保留 + 老用例全绿」验证不回归。
+
+1. **装载(F1)**:启动日志无 `ctx.settings.register is not a function`;`dsh --dump-config` 的 did not activate 清单不含 vision-bridge;插件页出现本插件的配置入口(不再永久 pending)。
+2. **卡片可用(F5/F6)**:标题 / 三组分区 / 字段集与 §9-1 清单逐条一致;改一项设置保存 → 不重启即生效(运行期读数变化);外部改动经订阅反映到卡片。
+3. **生效值(F2/F3)**:行配置的值进入运行期(体检区 / 日志读数一致);改一处可编辑值后运行期状态被重建。
+4. **保旧(F4)**:写入非法值(如 `timeoutMs: 0`)⇒ UI 保存被拒 / 报错,插件继续用旧值服务(贴图链路仍可用)。
+5. **代读链路(F7)**:纯文本模型会话贴图 → 占位符 → `vision_bridge_read` 返回结构化描述;请求图尺寸不超过 `maxImagePixels` 折算结果。
+6. **启动自愈(F8)**:换入干净 `.bak` 后重启 ⇒ 一行 `admission gate re-patched after update`;体检区按 §10-2 三段显示;patch 脚本 CLI 直跑照旧。
+7. **静态面(机器可核)**:仓库根 `node --test` 全绿;client-static 断言 inject 列表**不含** `settingsScope`;
+   服务端 `ctx.settings.register(` 的每一处出现**都在能力探测守卫之内**(老分支保留该调用 ⇒ 机器可核形式取「受守卫」;该条现由 `tests/dual-gen.test.mjs` 源码扫描断言机检);
+   自愈调用点**位于所有 settings 面调用之前**(F8 静态断言,`lib/index.js:335` < `:344`/`:356`;同由 `tests/dual-gen.test.mjs` 源码扫描断言机检)。
+8. **降级可见**:卡片进入 `unavailable`(内核不暴露设置面)⇒ 只读提示 + 保存禁用,**不冒充**可写;两代槽位皆不可用 ⇒ 不挂载 + 一行 warn(控制台可观测)。
+9. **不回归(F9)**:§8 的 1-6 项、§9 的 1-7 项、§10 的 1-4 项在 0.1.7 上重跑通过;老用例(settings-lifecycle / client-static 老断言)全绿。
+
+> 计数回填:已回填(375;基线 318,只增不减)——见「附:自动化测试」;本批新增用例组在该小节列出。

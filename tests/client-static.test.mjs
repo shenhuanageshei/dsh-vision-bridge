@@ -13,6 +13,9 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // the §11 v2 structure (three groups, provider linkage, credential
 // three-forms, connectivity probe, environment panel) are asserted against
 // the file text, and the package manifest against strict JSON.parse.
+//
+// 017 compat adds a further face here: the two settings generations behind one
+// lazy source, the four-rung card ladder, and the three-state card (§4-D/E/H).
 
 const clientSrc = readFileSync(path.join(root, 'lib', 'client.js'), 'utf8');
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -30,28 +33,62 @@ describe('lib/client.js — module-loader factory shape', () => {
     assert.ok(clientSrc.includes('react.createElement'));
   });
 
-  it('declares the client service inject list (§11: remote + remote.credentials added)', () => {
-    // §11.2-6: the card needs remote.settings/remote.credentials through the
-    // `remote` seam — five service names on the plugin object (M0-2: the
-    // settings-plugins built-in card precedent declares exactly remote +
-    // remote.credentials).
-    assert.ok(clientSrc.includes('["slots", "settingsScope", "locale", "remote", "remote.credentials"]'));
+  it('declares a client inject list of only the faces both generations provide', () => {
+    // §4-D: a declared face a generation never provides keeps this fiber pending
+    // forever (the 0.1.7 break), so settings / credentials are read lazily
+    // through ctx.get and only slots + locale are declared.
+    const literal = clientSrc.match(/const inject = (\[[^\]]*\]);/);
+    assert.ok(literal, 'the inject constant must be a literal');
+    assert.deepEqual(JSON.parse(literal[1]), ['slots', 'locale']);
     assert.ok(clientSrc.includes('exports.inject = inject;'));
     assert.ok(clientSrc.includes('exports.apply = apply;'));
     assert.ok(clientSrc.includes('exports.name = name;'));
   });
 
-  it('registers a settings.plugin.item card keyed by the namespace', () => {
-    assert.ok(clientSrc.includes('const SLOT_NAME = "settings.plugin.item"'));
-    assert.ok(clientSrc.includes('const SETTINGS_NS = "vision-bridge"'));
-    assert.ok(clientSrc.includes('key: SETTINGS_NS'));
-    assert.ok(clientSrc.includes('ctx.slots.register'));
-    assert.ok(clientSrc.includes('ctx.slots.inject(SLOT_NAME'));
+  it('mounts the card on the four-rung ladder, most precise first', () => {
+    assert.equal(clientSrc.includes('const SLOT_NAME = '), false, 'the single hard-coded slot name is gone');
+    const start = clientSrc.indexOf('const SLOT_CANDIDATES = [');
+    const ladder = clientSrc.slice(start, clientSrc.indexOf('];', start));
+    assert.deepEqual([...ladder.matchAll(/slot: ("?[\w.@/-]+"?)/g)].map((m) => m[1].replace(/"/g, '')), [
+      'plugins.row.config', 'plugins.bundle.config', 'plugins.item', 'LEGACY_SLOT_NAME',
+    ]);
+    assert.ok(clientSrc.includes('const LEGACY_SLOT_NAME = "settings.plugin.item";'), 'the last rung is the 0.1.6 settings list slot');
+    assert.deepEqual([...ladder.matchAll(/kind: "(\w+)"/g)].map((m) => m[1]), ['keyed', 'keyed', 'list', 'keyed']);
+    assert.ok(clientSrc.includes('const CARD_ID = "vision-bridge";'));
+    assert.ok(clientSrc.includes('const ROW_KEY = name + "#" + CARD_ID;'));
+    assert.ok(clientSrc.includes('const CARD_ORDER = 40;'));
+    assert.ok(clientSrc.includes('const unregister = slots.register(cardRegistration(ctx, choice.candidate, controller), VisionBridgeCard);'), 'the chosen rung carries the registration options');
+    assert.ok(clientSrc.includes('slots.inject(choice.candidate.slot, register)'), 'an undeclared rung waits for its declaration');
+    assert.ok(clientSrc.includes('warnOnce("no card slot is available in this kernel'), 'no shape fits ⇒ one warning, no half-built card');
   });
 
-  it('binds the settings scope and saves through one atomic mutate', () => {
-    assert.ok(clientSrc.includes('ctx.settingsScope.bind({ namespace: SETTINGS_NS })'));
-    assert.ok(clientSrc.includes('await this.scope.mutate(plan.ops);'));
+  it('reads both settings generations through one revision-fenced source', () => {
+    assert.equal(clientSrc.includes('ctx.settingsScope.bind('), false, 'apply never binds a scope directly');
+    assert.ok(clientSrc.includes('createSettingsSource(ctx)'), 'the source is built in apply and handed to the controller');
+    assert.ok(clientSrc.includes('readService(ctx, "configForms")'), 'the 0.1.7 face is resolved lazily');
+    assert.ok(clientSrc.includes('readService(ctx, "settingsScope")'), 'the 0.1.6 face is resolved lazily');
+    assert.ok(clientSrc.includes('await this.source.write(plan.ops, this.snapshot().revision)'), 'the write carries the snapshot revision');
+    assert.ok(clientSrc.includes('return (await chosen.save(faceOf(chosen), ops, revision)) !== false;'), 'a refused write is a failure, never a silent success');
+    assert.ok(clientSrc.includes('kind: "configForms"') && clientSrc.includes('kind: "settingsScope"'), 'both generations are declared');
+    assert.ok(clientSrc.includes('ctx.effect(() => {'), 'the card registration and the source disposers ride ctx.effect');
+  });
+
+  it('renders the three-state card and keeps unknown values empty', () => {
+    assert.ok(clientSrc.includes('state.status === "loading"'), 'the skeleton branch is rendered');
+    assert.ok(clientSrc.includes('state.status === "unavailable"'), 'the unavailable branch is rendered');
+    assert.ok(clientSrc.includes('t("settingsUnavailable")'), 'the unavailable card says the settings face is missing');
+    assert.ok(clientSrc.includes('function formatValue(field, value, live = true)'), 'value formatting knows whether the face is live');
+    assert.ok(clientSrc.includes('return live ? field.options[0] : "";'), 'an off-list select stays empty while unknown');
+    assert.ok(clientSrc.includes('const live = status === "ready";'), 'only a ready face carries trustworthy values');
+    assert.ok(clientSrc.includes('if (props.view === "summary") return t("description");'), 'the detail page summary reuses the description');
+  });
+
+  it('never claims credential facts it cannot read', () => {
+    assert.ok(clientSrc.includes('const readable = this.credentials() !== undefined;'), 'readability follows the credential service');
+    assert.ok(clientSrc.includes('!option.readable ? [] : [option.configured'), 'an unreadable row keeps the bare reference');
+    assert.ok(clientSrc.includes('credentialsAvailable'), 'the credential area publishes the service state');
+    assert.ok(clientSrc.includes('t("credentialsUnavailable")'), 'the missing credential service is reported neutrally');
+    assert.match(clientSrc, /state\.credentialsAvailable\s*\?\s*e\("option", \{ key: PASTE_CREDENTIAL/, 'the paste form is only offered while the service is there');
   });
 
   it('registers the bilingual locale dictionary', () => {

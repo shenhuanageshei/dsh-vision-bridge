@@ -7,6 +7,7 @@
 - 评审来源:架构评审(拦截面/时序/inject)+ 库集成评审(vision-bridge 包装/缓存/适配器),全文见附录 A/B;多模型会诊通道故障,由两个独立上下文评审子代理替代
 - 修订记录:2026-09-04 设计评审 R1(7 项发现:3🔴4🟡)全按建议处置修订;详见各节内嵌〔评审#n〕标注
 - 修订记录:2026-09-05 启动事故勘误——inject 服务名 systemPrompt(驼峰)、profile 禁手动同名 loader 行、file: 依赖改动后必须 pnpm install(已内嵌 §5.2/§5.8)
+- 修订记录:2026-09-24 双代兼容(DSH 0.1.6 / 0.1.7)设计随本批移出本档(落在承载该批次的宿主仓设计目录);本档只保留插件长期设计(§1–§12 + 附录);§12.2 A 的自愈位置措辞随之更正
 - 目标仓库:插件 plugins/dsh-vision-bridge;引擎库 vendor 自 github.com/shenhuanageshei/vision-bridge(vendor 上游,公开仓)
 
 ## 1. 目标与非目标
@@ -445,7 +446,7 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 
 ### 12.2 方案
 
-- **A. 磁盘自愈**:lib/index.js apply() 内、settings 注册之后,加 selfHealAdmissionGate():
+- **A. 磁盘自愈**:lib/index.js apply() 入口最前(**所有 settings 面调用之前**,位置依据:0.1.7 上 settings 注册调用会抛错,写在其后的自愈永不执行),加 selfHealAdmissionGate():
   - 复用 pplyAdmissionPatch({nodeModulesDir, logger})(§11.4 导出;幂等。注:§11.4 表早期写作 applyPatch,§11.8 未记录更名——本节统一以实际导出符号 applyAdmissionPatch 为准,§11.4 行随本次修订一并更正)
   - nodeModulesDir 双源:插件根 ../.. 相对推导为主、DSH_HOME env(→profiles/web/node_modules)为辅(与 patch 脚本 DEFAULT_NM 的 DSH_HOME 推导同款逻辑,原「FIX#7」悬空引用就此自述)
   - 日志:重打成功=1 行 info(`[vision-bridge] admission gate re-patched after update (effective on next boot)`);已在=静默;失败=1 行 error(不抛)
@@ -509,7 +510,6 @@ dsh-VisionBridge 视觉代读          [已连接✓] [mode: both]
 | 6 | 🔵 | 死代码:credential conflict 分支+误导文案(§11.8-6 修订后不可达) | 已删:分支与两处 i18n 文案移除 |
 | 7 | 🔵 | readCatalogBaseUrls 插在 projectProviders 的 JSDoc 与定义之间(文档错位) | 已修:JSDoc 移回各自函数前 |
 | 8 | 🔵 | client 四态无自动断言;TEST-MATRIX probe 计数虚 1 | 已修:client-static 增 admission four-state 断言组(319 例含);矩阵计数更正 |
-
 
 ## 附录 A:架构评审报告(全文)
 

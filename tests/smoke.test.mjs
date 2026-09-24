@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { apply } from '../lib/index.js';
+import { plainSection } from './_plain-section.mjs';
 
 const enabled = process.env.VISION_BRIDGE_SMOKE === '1'
   && !!process.env.VISION_BRIDGE_SMOKE_BASEURL
@@ -40,7 +41,7 @@ describe('smoke: real VLM call (opt-in)', { skip: !enabled }, () => {
       settings: {
         register(ns, schema, options = {}) {
           return {
-            get: () => schema(options.base ?? {}),
+            get: () => plainSection(schema(options.base ?? {})),
             watch: () => () => {},
           };
         },

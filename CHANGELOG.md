@@ -29,6 +29,18 @@
 - **体检区准入行四态**：✓已生效（disk=patched & runtime=dead）/ ⚠已修磁盘待重启（disk=patched & runtime=live）/ 中性「运行时状态未验证」（unknown——**不冒充 ✓**，9/9「UI 回显≠服务端真相」误导源的根治）/ ⚠未修+一键修复（disk=missing）。
 - 测试 hermetic 化：`VISION_BRIDGE_SELF_HEAL_NM` 覆盖 env——单测永不触真实宿主 node_modules。
 
+#### 双代兼容（DSH 0.1.6 / 0.1.7）（2026-09-24）
+
+- **背景**：DSH **0.1.7 重写了设置服务面**（`settings.register` / `get` / `installSection` 均不再存在；客户端 `settingsScope` 亦改名搬家）。后果是插件在新内核上**整插件不加载**（`ctx.settings.register is not a function`）、设置卡片**永久 pending**。本批让同一份代码在 0.1.6 与 0.1.7 上都能装、能读配置、能改配置、能代读图片。
+- **服务端·能力探测分派**：探 `typeof ctx.settings.register === 'function'`。老代走原路（该分支一行不改）；新代读**响应式配置引用**（`config.<字段>.get()`），配置变更经 `loader/volatile-update` 重建运行期，非法值由 `internal/config` 拦截（**带所有权守卫**，只校验本插件的候选值）并按平台语义**保留旧值**；新代码落独立模块 `lib/settings-compat.js`。
+- **配置 schema**：给**卡片可编辑字段**加可热改标记（能力探测包裹——老代 schemastery 无该方法时原样返回，故老代解析不受影响）。字段集与校验语义不变。
+- **客户端·数据源适配器**：inject 收敛为 `["slots","locale"]`，删除 0.1.7 上永不满足的 `settingsScope`；改双实现适配器（0.1.7 `configForms` / 0.1.6 `settingsScope`，卡片逻辑零改）+ **槽位候选探测** + 三态 UI（ready / loading / unavailable，**不冒充**可写）。
+- **附件签名换代**：0.1.7 的 `readImageRequest` 中参由 `{maxPixels, maxBytes}` 变为 `{width, height, maxBytes}` ⇒ 宿主那套纯几何折算移植进 `lib/request-dimensions.js`（幂等、逐分支等价）；老代仍传旧中参。
+- **启动自愈前移**：改为 `apply()` 入口最前调用——0.1.7 上原位置在 `settings.register` 之后，而该调用在新内核会抛错 ⇒ 自愈永不执行。
+- **跨命名空间读**：0.1.7 连 `settings.get(ns)` 也没有 ⇒ 改走 `settings.describe()` 投影（provider 联动下拉 / 首次冻结默认值）。
+- **验证**：`node --test` **375/375 全绿**（本批前基线 318，只增不减；新增 `tests/dual-gen.test.mjs` 30 例、`tests/client-adapter.test.mjs` 24 例）；静态断言三条（客户端 inject 不含 `settingsScope`、服务端 `ctx.settings.register(` 全部位于能力探测守卫内、自愈调用早于首个 settings 面调用）；**0.1.7 真机活体**：插件装载成功、启动卡片无本插件条目、设置卡片在插件行详情页可见可配、纯文本模型贴图 → 占位符 → `vision_bridge_read` 返回描述（实测通过）。
+- **本批遗留边界**：见下 `Known Issues / Boundaries` 前三条。
+
 ### Changed
 
 - **凭证贴密钥语义修订**（2026-09-07 用户反馈）：`set()` 直接覆盖已存在条目（用户本意就是换 Key）；describe 预检与「条目已存在请改名」拒绝逻辑整体移除（曾阻断合法换钥）。
@@ -50,12 +62,15 @@
 - modlens paste-to-path 接管与本插件的设计重叠（同为「文本模型读图」目标）：已装 modlens 的部署建议关闭其接管（卡片一键关闭 / profile patch 行 `pasteToPath: false`）；modlens 其余能力（任意路径读图/全文 OCR/failover）与本插件分工并存（design §6）。
 - 回合取消只覆盖附件读取；VLM HTTP 调用不可取消（上游库 `AnalyzeParams` 无 signal 面，不改库源码约束）。
 - 8-hex 前缀 32bit 空间理论碰撞率低但非零；多命中返回候选列表。
+- **设置卡片位置随内核代际变化**（2026-09-24 双代兼容批）：DSH 0.1.6 =「设置 → 插件」内的一张卡片；DSH 0.1.7 =「内置插件 → 该插件行 → **详情页**」的配置区——宿主在 0.1.7 只在行**详情页**渲染该配置槽，列表页只显示描述文字，故 0.1.6 的位置在新内核上不存在。
+- **0.1.6 客户端槽面未在真机核验**（本机无 0.1.6 树）：老代槽服务是否提供声明探测面（`spec` / `specDynamic`）与等声明面（`inject`）未验；若两者皆无，卡片将**不挂载**（留一条 warn），而改造前是直接注册老槽位。
+- **两个文件先于本批超 500 行参考线**：`lib/client.js` 1636 行、`lib/index.js` 571 行；拆分（客户端需先验两代 chunk 装载面）登记为后续工作。
 
 ### 详见
 
 - 设计：`docs/design.md` §11（卡片 v2）/ §11.8（偏差记录 9 项）/ §12（自愈+探针 v2）/ §12.8（偏差记录 8 项）
 - 验收：`docs/VERIFY.md` §9（卡片 v2）/ §10（自愈+探针）
-- 测试：`tests/TEST-MATRIX.md`（§11/§12 映射行）；`node --test` 319 用例
+- 测试：`tests/TEST-MATRIX.md`（§11/§12 映射行）；`node --test` 375 用例
 
 ## [0.1.1] — 2026-09-07
 

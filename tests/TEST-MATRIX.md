@@ -65,3 +65,22 @@
 | §12.4-6 既有 CLI/路由用例零回归 | POST /fix-admission 3 例复跑全绿（applyAdmissionPatch 导出面未改） | — | — | server-routes.test.mjs（§11.5-6 行，本次未改动） |
 | §12.2 B client 三态渲染 | disk=patched+runtime=dead→✓；disk=missing→⚠+一键修复 | runtime=unknown→中性「已写入磁盘——运行时状态未验证」（不冒充 ✓） | disk=patched+runtime=live→⚠「已修复磁盘，重启后生效」 | client-static.test.mjs 既有静态断言（本次未改动）+ VERIFY §10 人工验收 |
 | §12.2 B client | client-static 断言:admissionLive/admissionUnverified/savedFlash 渲染+admissionOk 严格判定 | i18n en/zh 四键 | — |
+
+## §13 双代（0.1.6/0.1.7）兼容映射（2026-09-24 增订；对应设计 §7-1..13）
+
+> 覆盖现状如实标注：客户端双代行为用例在 `client-adapter.test.mjs`；**服务端新分支**（`lib/settings-compat.js`、`lib/request-dimensions.js`）
+> 的自动用例在 `tests/dual-gen.test.mjs`（30 例，2026-09-24 二轮；分派/守卫 · 自愈行序 · 装配与读法 · 校验拦截 · 跨命名空间读与投影 · 尺寸折算等价）。
+
+| 验收条 | 正常 | 边界 | 错误 | 用例（文件） |
+|---|---|---|---|---|
+| §7-5① 客户端 inject 面 | inject 列表仅 `slots`+`locale`，不含 `settingsScope` | — | — | client-static.test.mjs（module-loader factory shape 的 inject 断言） |
+| §7-5 卡片四顺位槽梯 | 顺位声明在⇒直接注册（row / bundle / item / legacy 4 例） | 声明晚到⇒走 `slots.inject` 等声明，单挂守卫只挂一张 | 无探测面⇒等 legacy；`kind` 不符⇒退下一顺位 + warn；候选皆无⇒不挂载 + 恰 1 条 warn | client-adapter.test.mjs（槽梯 6 例） |
+| §7-5/6 三态卡片 | `ready`⇒实值填入 + 保存可用（0.1.7 走 `configForms` 服务） | 面晚到⇒唤醒轮询（500ms）后重发布为 `ready` | `loading`⇒骨架、无控件冒充值；`unavailable`⇒置顶只读提示 + 控件只读 + 保存禁用 | client-adapter.test.mjs（三态 5 例） |
+| §7-6 写路径 | 0.1.7：`configForms.mutate(ops, revision)` 携带快照 revision + `savedFlash` | 两代并存⇒取 0.1.7 | `mutate` 返回 false⇒`saveRejected` 文案，失败不静默 | client-adapter.test.mjs（写路径 4 例） |
+| §7-9 客户端老路径行为保持 | 0.1.6 面：`settingsScope.bind` 恰一次、`mutate` 单参、调用序列原样 | inject 瘦身后一次 `loading` 瞬态（设计 §8 认可） | — | client-adapter.test.mjs（0.1.6 2 例） |
+| §7-12 降级可见（客户端） | 无设置面⇒中性提示，手填字段保留 | 仅 `remote.credentials`⇒凭证面仍可读 | 无凭证服务⇒中性注 + 无粘贴项，保留 `__manual` | client-adapter.test.mjs（凭证 3 例） |
+| §7-1/2/3/4 服务端分派/装配/传播/校验对拍 | 两代 apply() 各自装配（老 = register 句柄、新 = volatile ref），运行期读数一致 | 面缺失/register 非函数/无 ref/表退化 ⇒ 降级可见且不抛 | 非法候选两代同拒，拒后旧配置继续服务 | dual-gen.test.mjs（§7-1/9 分派 8 例，含下两行的源码扫描各 1；§7-2/3 装配 8 例、§7-4 校验 5 例、跨代装配 2 例） |
+| §7-5② 服务端 `ctx.settings.register(` 受守卫 | 出现点均为守卫三元臂，探针先于调用（`lib/index.js:344/355-357`） | 老代 ⇒ 仍经句柄注册（行为侧分派例） | 非函数 register ⇒ 走新面、不触老调用 | dual-gen.test.mjs（源码扫描断言 + `§7-1/9` 两代 apply() 例） |
+| §7-8 自愈前移 | 自愈调用 `lib/index.js:335` < 首个 settings 面调用 `:344`/`:356`（源码扫描断言：调用点先于能力探测与 register） | 自愈 throw⇒仅 1 行 error、不阻塞启动 | — | dual-gen.test.mjs（§7-8 源码扫描 1 例）+ self-heal.test.mjs（throw 不阻塞 2 例） |
+| §7-13 描述符投影 | `describe()` 行含 `llm-pi-ai` ⇒ 读取辅助返 `value` ⇒ `projectProviders` 得非空行 | 表内无该 ns ⇒ 空投影、零告警（卡片仅留自定义项） | `describe()` 抛错 ⇒ 读取视为不可用 + 恰 1 条 warn | dual-gen.test.mjs（`§2.1-18/§7-13` 5 例）；真机 provider 下拉非空属部署期活体验收（见 `docs/VERIFY.md` §11） |
+| §7-10 计数护栏 | 插件根 `node --test` 375 例零失败（插件层 267 + vendor 108），基线 318 只增不减 | — | — | 本批实跑读数（VERIFY「附：自动化测试」） |
