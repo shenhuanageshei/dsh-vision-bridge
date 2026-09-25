@@ -6,6 +6,27 @@
 
 ### Added — v0.2 系列开发中
 
+#### 运行时服务缝（design v4.1，2026-09-26）—— 取代「改内核源码」的准入策略
+
+- **动机**：DSH 桌面版把内核打包进 `resources/app.asar`，`scripts/patch-admission-gate.mjs` 那套「按目录改内核源码」够不到，
+  纯文本模型（如 `zai-coding-cn:glm-5.3`，`input: []`）发图仍抛 `MODEL_DOES_NOT_SUPPORT_IMAGES`。
+- **关键发现**：DSH 判定「模型认不认图」走两条**互不调用**的路径 ——
+  准入闸（session controller `prompt()` / subagent `assertImageCapable()` / ACP `assertImageRoute`）读**服务方法** `llm.resolveModelInfo`；
+  图片投影（`LlmRuntime.adapterStream` → `[image omitted … sha256:xxxxxxxx]`）读 `adapter.prepareCall().model`。
+  装饰前者让闸门放行，投影照旧发生 ⇒ 图能入账，插件照旧代读。**零内核改动、零落盘**。
+- **新增 `lib/seam.js`**：对**真实服务实例**（`Symbol.for('cordis.original')`）操作；`Object.defineProperty(…, enumerable:false)` 保真；
+  `delete` 还原并清标记；`already` 走**行为自证**（标记在但层不是我们的一律按未装处理）；三态 `installed / already / unsupported`。
+- **新增三个 live 配置键**：`seam.mode`（auto/off）、`seam.include`（`provider:model` 白名单，非法项整体拒绝保旧值）、
+  `seam.requireReader`（默认 true：代读不可用则**不注入**、保持硬拒绝，杜绝「发送成功但无人读图」）。
+- **接线**：`apply()` 最先安装（挂在 `ctx.effect` 上受 fiber 生命周期保护；整段 try/catch → 还原 → 抛出）；
+  `settings.watch` 驱动 卸载→重算→重装；disposer 还原。
+- **`lib/auto.js` 2 行**：round-3 模态门禁改读 `resolveModelInfoUnseamed()` —— 否则自动代读会把纯文本会话读成「能收图」而跳过代读。
+- **测试**：新增 `tests/seam.test.mjs` 30 例（含每条修复的变异回归）；仓库根 `node --test` **405 用例零失败**（基线 399）。
+- **评审**：四轮独立评审（设计 FAIL→PASS、实现 FAIL→PASS），报告见 `docs/review-design-v4*.md`、`docs/review-impl-v4*.md`；
+  当前状态与未做项见 `docs/HANDOFF-2026-09-26.md`，人工验收清单见 `docs/VERIFY.md` §12。
+- **本机安装方式**：profile 依赖由 `file:`（复制）改为 `link:`，插件目录直接指向本仓库 —— 改源码不再需要同步，重启即生效。
+- **真机验证（2026-09-26，DSH 桌面版 0.1.7-rc.2）**：重启后纯文本模型会话（GLM-5.3）贴图**发送成功**，图片入账并由视觉引擎代读返回结构化描述（测试会话 `session-b37fe071`）；`node --test` **405 用例零失败**。
+
 #### 设置卡片 v2（design §11，2026-09-07~09）
 
 - **卡片改名**「dsh-VisionBridge 视觉代读」（原「Vision 截图代读」）。

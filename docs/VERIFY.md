@@ -193,3 +193,36 @@
 9. **不回归(F9)**:§8 的 1-6 项、§9 的 1-7 项、§10 的 1-4 项在 0.1.7 上重跑通过;老用例(settings-lifecycle / client-static 老断言)全绿。
 
 > 计数回填:已回填(375;基线 318,只增不减)——见「附:自动化测试」;本批新增用例组在该小节列出。
+## 12. 运行时服务缝（2026-09-25 增订，design v4.1）
+
+> 前置（**2026-09-26 起改为直接 link，不再 robocopy 同步**）：桌面版 profile 的插件入口
+> `C:\Users\magic\.dsh\profiles\desktop\node_modules\@dsh-external\dsh-vision-bridge`
+> 已由 junction 直接指向本仓库 `D:\DSH-Portable\plugins\dsh-vision-bridge`（原为 pnpm store 复制副本，改一处源码要同步一次）。
+> **改完源码只需重启 DSH 即可生效**。注意：`pnpm install` 会把这个 junction 重建回复制副本——
+> 要永久保持请把 profile `package.json` 的依赖改为 `link:D:/DSH-Portable/plugins/dsh-vision-bridge` 并重跑 install。
+> 本节同时登记**本批未接项**造成的已知偏差。
+>
+> **〔2026-09-26 验收记录〕** §12-3 已在 DSH 桌面版 0.1.7-rc.2 上通过：纯文本模型（GLM-5.3）会话贴图发送成功并完成代读
+> （sha256:170ffeed，895×298，测试会话 `session-b37fe071`）；`node --test` = 405/405。其余各条的自动化部分（插件装载、代读引擎连通、
+> 设置投影未被污染、不产生假 ✓）已由 lead 逐条实测，结论见 `docs/HANDOFF-2026-09-26.md`。
+
+1. 装载：启动日志出现一行 `vision-bridge seam: installed on llm.resolveModelInfo (image capability injection active)`；无 error。
+2. 自证（§4.5-2）：日志 `runtime seam live — self-check passed (<provider>:<model>)`；取不到自证路由时是 `installed but not self-verified — …`（中性，不得出现假 ✓）。
+3. 端到端（E2）：纯文本模型会话 Ctrl+V 贴图 → 发送**成功**（不再出现「当前模型不支持图片」）→ 会话日志含 image block → 模型上下文出现 `[image omitted … sha256:xxxxxxxx]` → `vision_bridge_read` 返回结构化描述。
+4. 多模态回归（E3）：`glm-5.3-flash` 贴图仍原生内联；装缝前后 `resolveModelInfo` 逐字段相同。
+5. 子代理（E4）：给纯文本子代理发图不再报 `subagent/attachment-invalid`。
+6. 卸载还原（E5/E5b）：停用插件 → 贴图恢复硬拒绝；再启用 → 缝可正常重装（不出现 `already` 假阳性）。
+7. live 配置（E6/E7）：`seam.mode=off` 不重启即回到硬拒绝；`seam.include` 收窄后，被排除路由仍被拒、被包含路由放行。
+8. 代读前置（B5）：把 provider/credential 清空 → 缝不注入，贴图仍被硬拒（不得出现「发送成功但无人读图」）。
+9. `node --test` 全绿（本批基线 **405 用例**；`tests/seam.test.mjs` 30 例）。
+
+**已知偏差（本批未接，下一批处理）**：
+
+- **§4.7-1 未接**：缝 live 时**没有**跳过 `selfHealAdmissionGate`（桌面版上它只是静默 not-found，无实害；便携版上会出现「磁盘补丁 + 缝」双通路，未评估）。
+- **§4.7-2 未接**：缝 live 时**没有**跳过行为探针。后果（评审 D3 实测核算）：开启 `VISION_BRIDGE_ADMISSION_PROBE=1` 的部署里，合成带图 prompt 会被**入账**（此前被闸拒绝 ⇒ 零残留），而 `cleanupScratchMessage` 未接线 ⇒ scratch 会话会留下一条合成消息；同时 `runtime` 恒为 `dead`，§12.1 story-1 的 `conflict` 信号不再触发。**不要把该 `dead` 当作磁盘证据**。
+  注：客户端 ✓ 需要 `disk=patched` **且** `runtime=dead`，桌面版 `disk=unknown` ⇒ 当前**不会**产生假 ✓。
+- **N-I2**：被装饰方法每次调用都做一次凭证解析、reader 不可用时逐次 warn；`buildModelCatalog` 会按 provider×model 批量调用 ⇒ 一次 GUI 目录构建可能产生 N 次解析 + N 行 warn（方向安全）。
+- **N-I4**：`llm` 服务若在 `apply()` 时尚未就绪，缝在本进程内不会重试（`ctx.inject(['llm'], …)` 与既有 `dual-gen` 断言冲突，留到 §4.6 批）。
+- **N-I6**：`lib/seam.js` 的标记写入仍在 try 之外；仅在「实例不可扩展**且**自带自有可配置 `resolveModelInfo`」这种今天不成立的前提下会抛（不产生静默通路）。
+
+**尚未执行的交付步骤**：源码改动**未**同步到安装副本、**未**重启 DSH，因此**当前运行中的 DSH 仍走旧行为**（贴图仍被硬拒）。本节全部条目属于「同步 + 重启后」的人工验收范围。
