@@ -259,9 +259,51 @@ describe('lib/client.js — §11 connectivity probe and environment panel', () =
     assert.ok(clientSrc.includes('t("envReady")'), 'the all-✓ collapsed summary exists');
   });
 
-  it('collapses the environment panel to one green line when everything is ok (§11.3E)', () => {
-    assert.ok(clientSrc.includes('const allOk = connectivityOk && admissionOk && modlensOk;'));
+  it('collapses the environment panel to one green line only when the §4.6 seam rows are green too', () => {
+    // §4.6: the old expression (connectivity ∧ disk-patch ∧ modlens) would hide
+    // an installed-but-unproven seam behind "environment ready" — a ✓ the card
+    // must not claim. The collapse therefore also requires a LIVE seam, no
+    // residue, and a configured reader.
+    // F1: the disk patch is a second working path — `(seamLive || admissionOk)`
+    // — while F3 keeps an installed-but-unproven seam (and a real residue) from
+    // ever collapsing.
+    assert.ok(clientSrc.includes('const allOk = connectivityOk && (seamLive || admissionOk)'));
+    assert.ok(clientSrc.includes('!seamUnproven && !seamResidue && reader.ok && modlensOk'));
     assert.ok(clientSrc.includes('if (allOk) {'));
+  });
+
+  it('renders the §4.6 four rows and never fakes a ✓ (§4.6)', () => {
+    for (const fn of ['seamRow', 'markerRow', 'readerRow', 'explainRow']) {
+      assert.ok(clientSrc.includes('function ' + fn + '('), fn + ' is rendered');
+    }
+    assert.ok(clientSrc.includes('const seamLive = seam?.live === true;'),
+      'only a tri-state live === true may render as ✓');
+    assert.ok(clientSrc.includes('const seamResidue = seam?.residue === true;'),
+      'F3: only the server flag (mark present, layer not ours) is a residue');
+    assert.ok(clientSrc.includes('const seamUnproven = seamInstalled && !seamLive;'),
+      'installed-without-proof is its own (neutral) state');
+    assert.ok(clientSrc.includes('return explainRow("seam", "dvb-unknown", t("seamUnproven")'),
+      'installed-without-proof renders NEUTRAL, never ✓');
+    assert.ok(clientSrc.includes('return explainRow("seam", "dvb-warn", t("seamUnsupported")'),
+      'unsupported renders ✗');
+    assert.ok(clientSrc.includes('t("seamReason") + seam.reason'),
+      'the server reason is shown on the row (no silent degradation)');
+    // row 2 (residue) and its reinstall explanation
+    assert.ok(clientSrc.includes('t("markerResidueExplain")'), 'the residue row explains how to recover');
+    assert.ok(clientSrc.includes('no \\"reinstall seam\\" action') || clientSrc.includes('reinstall seam'),
+      'the residue explanation states that no server action exists');
+    // row 3 (reader) and row 4 (legacy)
+    assert.ok(clientSrc.includes('t("readerMissingExplain")'), 'the unconfigured reader explains the hard rejection');
+    assert.ok(clientSrc.includes('t("legacySupersededExplain")'), 'the legacy disk row explains the takeover');
+    assert.ok(clientSrc.includes('if (isAdmission && seamLive) {'),
+      'with the seam live the disk row reports "superseded" instead of a §12 verdict');
+    // both languages carry the new copy
+    assert.ok(clientSrc.includes('seamLive: "Runtime seam live'));
+    assert.ok(clientSrc.includes('seamLive: "运行时缝已生效'));
+    assert.ok(clientSrc.includes('markerResidue: "Marker present'));
+    assert.ok(clientSrc.includes('readerMissing: "Reader not configured'));
+    assert.ok(clientSrc.includes('legacySuperseded: "Not applicable to this deployment'));
+    assert.ok(clientSrc.includes('legacySuperseded: "对本部署不适用'));
   });
 });
 

@@ -193,18 +193,19 @@
 9. **不回归(F9)**:§8 的 1-6 项、§9 的 1-7 项、§10 的 1-4 项在 0.1.7 上重跑通过;老用例(settings-lifecycle / client-static 老断言)全绿。
 
 > 计数回填:已回填(375;基线 318,只增不减)——见「附:自动化测试」;本批新增用例组在该小节列出。
-## 12. 运行时服务缝（2026-09-25 增订，design v4.1）
+## 12. 运行时服务缝（2026-09-25 增订；2026-09-26 补齐 §4.6/§4.7 并发布 0.3.0）
 
 > 前置（**2026-09-26 起改为直接 link，不再 robocopy 同步**）：桌面版 profile 的插件入口
 > `C:\Users\magic\.dsh\profiles\desktop\node_modules\@dsh-external\dsh-vision-bridge`
-> 已由 junction 直接指向本仓库 `D:\DSH-Portable\plugins\dsh-vision-bridge`（原为 pnpm store 复制副本，改一处源码要同步一次）。
-> **改完源码只需重启 DSH 即可生效**。注意：`pnpm install` 会把这个 junction 重建回复制副本——
-> 要永久保持请把 profile `package.json` 的依赖改为 `link:D:/DSH-Portable/plugins/dsh-vision-bridge` 并重跑 install。
-> 本节同时登记**本批未接项**造成的已知偏差。
->
+> 已由 junction 直接指向本仓库 `D:\DSH-Portable\plugins\dsh-vision-bridge`；profile 依赖也已改为 `link:`，
+> `pnpm install` 不会把它重建回复制副本。**改完源码只需重启 DSH 即可生效。**
+
 > **〔2026-09-26 验收记录〕** §12-3 已在 DSH 桌面版 0.1.7-rc.2 上通过：纯文本模型（GLM-5.3）会话贴图发送成功并完成代读
-> （sha256:170ffeed，895×298，测试会话 `session-b37fe071`）；`node --test` = 405/405。其余各条的自动化部分（插件装载、代读引擎连通、
+> （sha256:170ffeed，895×298，测试会话 `session-b37fe071`）。其余各条的自动化部分（插件装载、代读引擎连通、
 > 设置投影未被污染、不产生假 ✓）已由 lead 逐条实测，结论见 `docs/HANDOFF-2026-09-26.md`。
+>
+> **〔2026-09-26 收尾记录〕** §4.6（卡片四行）与 §4.7（缝 live 时让路磁盘自愈与行为探针）已交付并过评审；
+> 本清单新增第 10–13 项。测试基线 **428 用例**（`tests/seam.test.mjs`、`tests/seam-runtime.test.mjs` 等）。
 
 1. 装载：启动日志出现一行 `vision-bridge seam: installed on llm.resolveModelInfo (image capability injection active)`；无 error。
 2. 自证（§4.5-2）：日志 `runtime seam live — self-check passed (<provider>:<model>)`；取不到自证路由时是 `installed but not self-verified — …`（中性，不得出现假 ✓）。
@@ -214,15 +215,24 @@
 6. 卸载还原（E5/E5b）：停用插件 → 贴图恢复硬拒绝；再启用 → 缝可正常重装（不出现 `already` 假阳性）。
 7. live 配置（E6/E7）：`seam.mode=off` 不重启即回到硬拒绝；`seam.include` 收窄后，被排除路由仍被拒、被包含路由放行。
 8. 代读前置（B5）：把 provider/credential 清空 → 缝不注入，贴图仍被硬拒（不得出现「发送成功但无人读图」）。
-9. `node --test` 全绿（本批基线 **405 用例**；`tests/seam.test.mjs` 30 例）。
+9. `node --test` 全绿。
+10. 卡片四行（§4.6）：体检区显示「运行时缝 / 标记残留 / 代读可用性 / 磁盘补丁（遗留）」四行——
+    缝自证通过 ⇒ 第 1 行 ✓ 且第 4 行标「对本部署不适用——已被运行时缝取代」、不显示一键修复；
+    缝已装但未自证 ⇒ 第 1 行**中性**（不得 ✓），汇总行也不折叠为「环境就绪」；
+    缝 off / 不可用但磁盘补丁仍工作 ⇒ 汇总**可以**折叠为「环境就绪」（两条通路任一成立）。
+11. 探针让路（§4.7-2）：缝 live 时 `VISION_BRIDGE_ADMISSION_PROBE=1` 的运行时探针**不执行**，体检区显示第三态
+    （`admission.runtime === 'skipped'`、`reason === 'seam-live'`），**不再**产生 scratch 合成消息；缝非 live 时探针照旧。
+12. 自愈让路（§4.7-1）：同一进程内的后续挂载，缝 live 时跳过磁盘自愈并记一行 info；冷启动（live 未知）照旧修复；
+    本次基座把 seam 关掉（`seam.mode=off`）时**不**沿用上一次的 live 结论去 stand down。
+13. env 契约：`GET /vision-bridge/env` 的 `seam` = { status, live, reason, mode, include, requireReader, residue }；既有字段一字未改。
 
-**已知偏差（本批未接，下一批处理）**：
+**已知偏差（截至 0.3.0）**：
 
-- **§4.7-1 未接**：缝 live 时**没有**跳过 `selfHealAdmissionGate`（桌面版上它只是静默 not-found，无实害；便携版上会出现「磁盘补丁 + 缝」双通路，未评估）。
-- **§4.7-2 未接**：缝 live 时**没有**跳过行为探针。后果（评审 D3 实测核算）：开启 `VISION_BRIDGE_ADMISSION_PROBE=1` 的部署里，合成带图 prompt 会被**入账**（此前被闸拒绝 ⇒ 零残留），而 `cleanupScratchMessage` 未接线 ⇒ scratch 会话会留下一条合成消息；同时 `runtime` 恒为 `dead`，§12.1 story-1 的 `conflict` 信号不再触发。**不要把该 `dead` 当作磁盘证据**。
-  注：客户端 ✓ 需要 `disk=patched` **且** `runtime=dead`，桌面版 `disk=unknown` ⇒ 当前**不会**产生假 ✓。
-- **N-I2**：被装饰方法每次调用都做一次凭证解析、reader 不可用时逐次 warn；`buildModelCatalog` 会按 provider×model 批量调用 ⇒ 一次 GUI 目录构建可能产生 N 次解析 + N 行 warn（方向安全）。
-- **N-I4**：`llm` 服务若在 `apply()` 时尚未就绪，缝在本进程内不会重试（`ctx.inject(['llm'], …)` 与既有 `dual-gen` 断言冲突，留到 §4.6 批）。
-- **N-I6**：`lib/seam.js` 的标记写入仍在 try 之外；仅在「实例不可扩展**且**自带自有可配置 `resolveModelInfo`」这种今天不成立的前提下会抛（不产生静默通路）。
+- **N-B2-3（告警闩锁覆盖面）**：闩锁按 `route+reason` 键控，`buildModelCatalog` 那种「N 个不同纯文本模型各调一次」仍每 route 一行 warn；
+  昂贵项（每次调用的凭证解析）已由 5s TTL 缓存归零，剩余成本受投影内纯文本模型数约束（`lib/seam.js` 的 JSDoc 已登记，刻意不在本批做）。
+- **外观一致性（lead 裁决接受）**：在「缝 unsupported + 磁盘补丁可用」这一**今天不存在**的部署里（需内核改名或服务实例不可扩展），
+  第 1 行会显示 ✗ 而汇总行折叠为「环境就绪」——即第 1 行的 ✗ 被汇总行隐藏。
+- **TTL 窗口**：凭证判据有 ≤5s 缓存，撤销凭证后最长 5s 内仍会注入（与「配置可用 ≠ 运行可用」同源）。
 
-**尚未执行的交付步骤**：源码改动**未**同步到安装副本、**未**重启 DSH，因此**当前运行中的 DSH 仍走旧行为**（贴图仍被硬拒）。本节全部条目属于「同步 + 重启后」的人工验收范围。
+- 历史偏差全部已修（0.3.0）：§4.7-1 / §4.7-2 让路、N-I2 凭证缓存与告警抑制、N-I4 `llm` 后到重试、N-I6 标记写入回滚。
+- **N-B3-1 已修（lead 执行 + 变异验证）**：F1 守卫的回归用例补上凭证接线后，删掉 `!seamUnproven` 会使其失败（修复前该用例在变异下恒真）；全量 428/428。

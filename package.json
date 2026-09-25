@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-vision-bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek Harness vision bridge: session screenshots route by model capability. Image-capable models receive attachments inline; text-only models see the standard placeholder, and the bridge reads the image through a vision-language model — on demand via the vision_bridge_read tool or automatically via agent/pre-step context injection. 会话截图按模型能力自动分流：多模态模型原样直读；纯文本模型经 VLM 代读（tool/auto 双模式）。",
   "type": "module",
   "engines": {

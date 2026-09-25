@@ -46,7 +46,7 @@ DSH 判定「这个模型认不认图」走两条**互不调用**的路径：
 - **Provider 联动**：下拉选 DSH 已配置 provider → 模型/凭证自动带出；「自定义」解锁手填。内置 URL 的 provider（zai/minimax 等）baseURL 自动补全。
 - **凭证三形态**：跟 provider 走 / 从已存条目选 / **粘贴 API Key**（密码框，保存即建条目；换 Key 直接覆盖，同名无需新建）。
 - **验证连通**：一键测试当前配置（返回延迟或具体错误）。
-- **环境体检**：准入补丁两态（磁盘 + 运行时探针）+ modlens 冲突检测 + 一键修复。
+- **环境体检（0.3.0 起四行）**：运行时缝状态（自证通过 / 已装未自证 / 不可用）、标记残留、代读可用性、磁盘补丁（遗留）；外加 modlens 冲突检测与一键修复。
 
 字段语义（`vision-bridge:` 命名空间，settings.yaml 直改等效）：
 
@@ -56,6 +56,7 @@ DSH 判定「这个模型认不认图」走两条**互不调用**的路径：
 | provider.baseURL / model | 卡片可配；留空则首次运行从 dsh-vision-toolkit 拷贝并本地固化（0.1.7 上该插件通常不可用 ⇒ 回落到插件内置默认值） |
 | credential | DSH CredentialRef（默认 `VISION_API_KEY`） |
 | promptExtra | 附加指令（≤2000 字符，拼在代读请求尾部） |
+| seam.mode / seam.include / seam.requireReader | 运行时缝（0.2.0 起）：`auto`/`off`；白名单 `provider:model`（空 = 全部）；代读不可用时是否仍注入（默认 true = **不注入**、保持硬拒绝）。三者均可热改，改完立即生效。 |
 | 其余 | timeoutMs / concurrency / cache / maxImageBytes / maxImagePixels / visionCapabilities / language / autoMode.maxPerTurn —— 见 `docs/design.md` §5.7 |
 
 ## 安装
@@ -80,7 +81,9 @@ DSH 判定「这个模型认不认图」走两条**互不调用**的路径：
 
 - **运行时缝依赖一个内部方法名**：它装饰的是 `llm.resolveModelInfo`。若未来内核改名，插件会打一行 error 并在体检区显示未生效（不静默），但需要按新内核适配。
 - **代读不可用时不放行**：`seam.requireReader`（默认 true）在视觉 provider/凭证未配置时**不注入**，带图消息仍被硬拒绝。这是有意的——宁可明确拒绝，也不制造「消息发出去了但没人看图」。
-- **磁盘补丁与探针尚未随缝让路**（登记为下一批）：缝生效时本应跳过旧的磁盘自愈与行为探针；当前未接。开启 `VISION_BRIDGE_ADMISSION_PROBE=1` 的部署里，探针会把「缝在跑」读成 `runtime=dead` 且会留下一条合成消息——**不要把它当作磁盘证据**（详见 `docs/VERIFY.md` §12 已知偏差）。
+- **旧机制已随缝让路**（0.3.0 起）：缝自证生效时，磁盘准入自愈与运行时探针都会跳过（探针返回第三态 `skipped`，不再产生 scratch 合成消息）；只有缝不可用/被关闭时，磁盘补丁那条通路才继续工作。
+- **磁盘补丁仍是遗留通路**：缝不可用（例如内核改名）而磁盘补丁可用时，体检区仍按磁盘补丁判定，但缝那一行的 ✗ 会被汇总行隐藏——该部署形态今天不存在，登记于 `docs/VERIFY.md` §12 已知偏差。
+- **凭证判据有 5 秒缓存**：撤销凭证后最长 5 秒内仍会注入（与「配置可用 ≠ 运行可用」同源）。
 - **modlens 用户**：modlens 的粘贴接管与本品设计重叠（同为文本模型读图）。已装 modlens 时请在卡片体检区「一键关闭」其接管（或 profile patch 行 `pasteToPath: false`），否则贴图被它截走。modlens 其余能力（路径/URL 读图、全文 OCR）与本品分工并存。
 - **回合取消只覆盖附件读取**：取消时 `readImageRequest`（附件字节读取）即时中止；经引擎 `analyze()` 公开 API 的 VLM HTTP 调用与重试退避**不可取消**（`AnalyzeParams` 不收 signal，包装层无法把信号传入引擎内部的 `adapter.call`，受不改库源码约束）。上游库为 analyze 增加 signal 透传后可根治。
 - 8-hex 前缀为 32bit 空间，理论碰撞率低但非零；多命中时返回候选列表。

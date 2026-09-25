@@ -1020,9 +1020,18 @@ describe('cross-generation assembly — same user values, same runtime read', ()
     try {
       const withInject = newGenCtx({ inject: true });
       const disposerA = await apply(withInject.ctx, newGenConfig({ persistDir: path.join(dir, 'a-cache') }));
-      assert.equal(withInject.registered.injects.length, 1, 'the web server scope is requested once');
+      // Two scoped injects since N-I4: the webServer route scope and the
+      // late-llm retry. The web server scope is still requested EXACTLY ONCE and
+      // is still registered first (its position is part of the ⑧ contract); the
+      // llm retry is additive and guarded, so this is an exact-equivalence
+      // widening of the old "one inject, and it is webServer" assertion.
+      assert.equal(withInject.registered.injects.length, 2, 'the web server scope plus the late-llm retry');
       assert.deepEqual(withInject.registered.injects[0].list, ['webServer']);
       assert.equal(typeof withInject.registered.injects[0].callback, 'function');
+      assert.equal(withInject.registered.injects.filter((entry) => entry.list.includes('webServer')).length, 1,
+        'the web server scope is still requested exactly once');
+      assert.deepEqual(withInject.registered.injects[1].list, ['llm']);
+      assert.equal(typeof withInject.registered.injects[1].callback, 'function');
       await disposerA();
 
       const withoutInject = newGenCtx();

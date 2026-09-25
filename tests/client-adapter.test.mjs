@@ -556,3 +556,157 @@ describe('the credential area without its service (§4-H2②)', () => {
     assert.equal(card.state().credentialsAvailable, true);
   });
 });
+describe('§4.6 — the environment check renders the seam rows honestly', () => {
+  /** The env payload the card fetches at construction; only `seam` varies. */
+  const envPayload = (seam) => ({
+    providers: [],
+    credentialCandidates: ['VISION_API_KEY'],
+    admission: { status: 'unknown', files: [], disk: 'unknown', runtime: 'skipped', reason: 'seam-live', conflict: false },
+    seam,
+    modlens: { installed: false, paste: 'off', conflict: false },
+  });
+
+  // The fetch stub stays installed for the whole test (the connectivity probe
+  // runs after mounting) and is withdrawn by the describe-level afterEach.
+  let restoreFetch = null;
+  afterEach(() => {
+    if (restoreFetch !== null) {
+      globalThis.fetch = restoreFetch;
+      restoreFetch = null;
+    }
+  });
+
+  async function mountWithEnv(payload, value = { provider: { baseURL: 'https://vision.example/v1', model: 'm1' }, credential: 'VISION_API_KEY', mode: 'both' }, extraServices = {}) {
+    if (restoreFetch === null) restoreFetch = globalThis.fetch;
+    // Routes by URL so the connectivity probe (POST /vision-bridge/test) can be
+    // driven too — the collapsed summary needs connectivityOk.
+    globalThis.fetch = async (url) => (String(url).includes('/test')
+      ? { ok: true, status: 200, json: async () => ({ ok: true, latencyMs: 7, model: 'm1' }) }
+      : { ok: true, status: 200, json: async () => payload });
+    const form = fakeConfigForm(value);
+    const kernel = fakeKernel({ services: { configForms: form.service, ...extraServices } });
+    const card = await mountCard(kernel);
+    for (let i = 0; i < 50 && card.state().envStatus !== 'ready'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(card.state().envStatus, 'ready', 'the env payload landed');
+    return { card, form };
+  }
+
+  /** Drive the connectivity probe and wait for its verdict. */
+  async function settleTest(card) {
+    card.props.runTest();
+    for (let i = 0; i < 50 && card.state().test.status !== 'ok'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(card.state().test.status, 'ok', 'the connectivity probe settled');
+  }
+
+  /** The class of the span carrying one row's label key. */
+  function labelClass(tree, key) {
+    const node = allNodes(tree).find((item) => item.type === 'span'
+      && Array.isArray(item.children) && item.children.includes(key));
+    return node === undefined ? null : node.props.className;
+  }
+
+  it('a live seam is ✓ and the legacy disk row reports the takeover', async () => {
+    const { card } = await mountWithEnv(envPayload({ status: 'installed', live: true, reason: 'self-check passed (qax:glm-5.3)', mode: 'auto', include: [], requireReader: true }));
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'seamLive'), 'dvb-ok');
+    assert.equal(labelClass(tree, 'markerOk'), 'dvb-ok');
+    assert.equal(labelClass(tree, 'legacySuperseded'), 'dvb-ok', 'no §12 verdict and no fix button while the seam is live');
+    assert.equal(hasText(tree, 'fixAdmission'), false, 'nothing left to repair');
+  });
+
+  it('installed but not self-proven is NEUTRAL — the exact state that must never show ✓', async () => {
+    const { card } = await mountWithEnv(envPayload({ status: 'installed', live: null, reason: 'no included text-only route', mode: 'auto', include: ['zai:x'], requireReader: true, residue: false }));
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'seamUnproven'), 'dvb-unknown');
+    assert.notEqual(labelClass(tree, 'seamUnproven'), 'dvb-ok');
+    // F3: not self-proven is NOT a residue — a warning here would contradict row 1.
+    assert.equal(hasText(tree, 'markerResidue'), false, 'no contradictory residue warning');
+    assert.equal(labelClass(tree, 'markerOk'), 'dvb-ok', 'the marker itself agrees with the installed layer');
+    assert.ok(hasText(tree, 'no included text-only route'), 'the raw server reason is shown, not swallowed');
+  });
+
+  it('a real residue (server flag) is the only thing that warns on row 2', async () => {
+    const { card } = await mountWithEnv(envPayload({ status: 'unsupported', live: null, reason: 'not installed', mode: 'auto', include: [], requireReader: true, residue: true }));
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'markerResidue'), 'dvb-warn');
+    assert.equal(hasText(tree, 'markerResidueHint'), true);
+  });
+
+  it('an unsupported seam is ✗ and says why', async () => {
+    const { card } = await mountWithEnv(envPayload({ status: 'unsupported', live: null, reason: 'llm service unavailable or has no resolveModelInfo', mode: 'auto', include: [], requireReader: true }));
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'seamUnsupported'), 'dvb-warn');
+    assert.ok(hasText(tree, 'llm service unavailable or has no resolveModelInfo'), 'the reason travels with the ✗');
+    assert.equal(labelClass(tree, 'legacySuperseded'), null, 'the disk row keeps its §12 verdict when the seam is not live');
+  });
+
+  it('an unconfigured reader states that the hard rejection is by design', async () => {
+    const { card } = await mountWithEnv(
+      envPayload({ status: 'installed', live: true, reason: 'ok', mode: 'auto', include: [], requireReader: true }),
+      { provider: { baseURL: 'https://vision.example/v1', model: 'm1' }, credential: '', mode: 'both' },
+    );
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'readerMissing'), 'dvb-warn');
+  });
+
+  it('seam.mode = off reports the seam row and marks the reader row not applicable', async () => {
+    const { card } = await mountWithEnv(envPayload({ status: 'off', live: null, reason: 'seam.mode=off', mode: 'off', include: [], requireReader: true }));
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'seamOff'), 'dvb-unknown');
+    assert.equal(labelClass(tree, 'readerOff'), 'dvb-unknown');
+  });
+
+  it('requireReader = false is a warning: the seam injects with nobody reading', async () => {
+    const { card } = await mountWithEnv(
+      envPayload({ status: 'installed', live: true, reason: 'ok', mode: 'auto', include: [], requireReader: false }),
+      { provider: { baseURL: 'https://vision.example/v1', model: 'm1' }, credential: 'VISION_API_KEY', mode: 'both' },
+    );
+    const tree = card.render();
+    assert.equal(labelClass(tree, 'readerDisabled'), 'dvb-warn');
+  });
+  it('F1: a deployment running on the DISK PATCH collapses again when the seam is off', async () => {
+    const payload = envPayload({ status: 'off', live: null, reason: 'seam.mode=off', mode: 'off', include: [], requireReader: true, residue: false });
+    payload.admission = { status: 'ok', files: [], disk: 'patched', runtime: 'dead', reason: undefined, conflict: false };
+    const { card } = await mountWithEnv(payload);
+    await settleTest(card);
+    const tree = card.render();
+    assert.ok(hasText(tree, 'envReady'), 'the working disk-patch path still reaches the ready summary');
+    assert.equal(hasText(tree, 'seamOff'), false, 'and the rows are collapsed away');
+  });
+
+  it('F1: an unavailable seam on a working disk patch collapses too (reader configured)', async () => {
+    const payload = envPayload({ status: 'unsupported', live: null, reason: 'no llm service', mode: 'auto', include: [], requireReader: true, residue: false });
+    payload.admission = { status: 'ok', files: [], disk: 'patched', runtime: 'dead', reason: undefined, conflict: false };
+    const credentials = { describe: async () => ({ ok: true, value: { VISION_API_KEY: { configured: true } } }) };
+    const { card } = await mountWithEnv(payload, undefined, { 'remote.credentials': credentials });
+    for (let i = 0; i < 50 && card.state().credentialCheck?.status !== 'ok'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(card.state().credentialCheck?.status, 'ok', 'the credential describe landed');
+    await settleTest(card);
+    assert.ok(hasText(card.render(), 'envReady'));
+  });
+
+  it('F1 guard: an installed-but-unproven seam never collapses, even when the disk patch works', async () => {
+    const payload = envPayload({ status: 'installed', live: null, reason: 'self-proof unavailable', mode: 'auto', include: [], requireReader: true, residue: false });
+    payload.admission = { status: 'ok', files: [], disk: 'patched', runtime: 'dead', reason: undefined, conflict: false };
+    // Review N-B3-1: without a configured reader this case asserted a constant
+    // (reader.ok stayed false, so allOk was false under every mutation). Wire the
+    // credential check exactly like the twin case above, so dropping !seamUnproven
+    // makes this assertion fail instead of silently passing.
+    const credentials = { describe: async () => ({ ok: true, value: { VISION_API_KEY: { configured: true } } }) };
+    const { card } = await mountWithEnv(payload, undefined, { 'remote.credentials': credentials });
+    for (let i = 0; i < 50 && card.state().credentialCheck?.status !== 'ok'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(card.state().credentialCheck?.status, 'ok', 'the credential describe landed');
+    await settleTest(card);
+    const tree = card.render();
+    assert.equal(hasText(tree, 'envReady'), false, 'a neutral seam row may not hide behind the ready line');
+    assert.equal(labelClass(tree, 'seamUnproven'), 'dvb-unknown');
+  });
+});

@@ -84,3 +84,14 @@
 | §7-8 自愈前移 | 自愈调用 `lib/index.js:335` < 首个 settings 面调用 `:344`/`:356`（源码扫描断言：调用点先于能力探测与 register） | 自愈 throw⇒仅 1 行 error、不阻塞启动 | — | dual-gen.test.mjs（§7-8 源码扫描 1 例）+ self-heal.test.mjs（throw 不阻塞 2 例） |
 | §7-13 描述符投影 | `describe()` 行含 `llm-pi-ai` ⇒ 读取辅助返 `value` ⇒ `projectProviders` 得非空行 | 表内无该 ns ⇒ 空投影、零告警（卡片仅留自定义项） | `describe()` 抛错 ⇒ 读取视为不可用 + 恰 1 条 warn | dual-gen.test.mjs（`§2.1-18/§7-13` 5 例）；真机 provider 下拉非空属部署期活体验收（见 `docs/VERIFY.md` §11） |
 | §7-10 计数护栏 | 插件根 `node --test` 375 例零失败（插件层 267 + vendor 108），基线 318 只增不减 | — | — | 本批实跑读数（VERIFY「附：自动化测试」） |
+
+## 运行时服务缝（design v4.1 / VERIFY §12）
+
+| 验收条 | 正常 | 边界 | 错误 | 用例（文件） |
+|---|---|---|---|---|
+| §4.2 装饰与还原 | 装 ⇒ 注入 image；还原 ⇒ 回基线 | 幂等 `already`（行为自证）；他人装饰在顶层时不破坏 | 实例不可扩展 ⇒ `unsupported` 且方法回滚、标记不写 | seam.test.mjs |
+| §4.5 代读前置（B5） | reader 可用 ⇒ 注入 | reader 不可用 ⇒ 不注入并恰一次 warn | 谓词抛错 ⇒ 用适配器原答案（fail-closed） | seam.test.mjs、seam-runtime.test.mjs |
+| §4.7-1 自愈让路 | 后续挂载 live ⇒ 跳过并记一行 info | 冷启动未知 ⇒ 照旧修复；实例变化 ⇒ 照旧 | 本次基座 mode=off ⇒ **不** stand down | seam-runtime.test.mjs |
+| §4.7-2 探针让路 | live ⇒ `runtime=skipped` 且**零提交** | live=false/null ⇒ 照旧探针并给 `dead` | 无 seam 源/抛错 ⇒ unknown，不炸体检路由 | seam-runtime.test.mjs |
+| §4.6 卡片四行 | live ⇒ ✓，遗留行报「已被取代」且无修复按钮 | 未自证 ⇒ 第 1 行中性且汇总不折叠；off/unsupported + 磁盘可用 ⇒ 仍可折叠 | unsupported / 真残留 / 代读未配置 ⇒ 各自 warn 且文案区分 | client-adapter.test.mjs、client-static.test.mjs |
+| §7-8 自愈顺序（既有） | 自愈调用仍先于所有 settings 面调用 | inject 由 1 条加宽为 2 条（webServer 仍第一且恰一次，新增 llm） | — | dual-gen.test.mjs |
