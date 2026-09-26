@@ -206,6 +206,15 @@
 >
 > **〔2026-09-26 收尾记录〕** §4.6（卡片四行）与 §4.7（缝 live 时让路磁盘自愈与行为探针）已交付并过评审；
 > 本清单新增第 10–13 项。测试基线 **428 用例**（`tests/seam.test.mjs`、`tests/seam-runtime.test.mjs` 等）。
+>
+> **〔2026-09-26 0.3.0 验收记录〕第 10 / 11 / 13 项通过（真机 + 卡片截图证据）**：
+> - **第 13 项**：`GET /vision-bridge/env` 返回 `seam = {status:"installed", live:true, reason:"self-check passed (zai-coding-cn:glm-5-turbo)", mode:"auto", include:[], requireReader:true, residue:false}`；
+>   既有四个字段（providers / credentialCandidates / admission / modlens）结构未变。
+> - **第 11 项**：同一次探测 `admission.runtime = "skipped"`、`reason = "seam-live"`（连续三次一致）⇒ 探针确实未执行，不再产生 scratch 合成消息。
+> - **第 10 项**：卡片体检区实际渲染为「运行时缝已生效——任何模型都能收图」（绿 ✓，含自证路由）／「标记与行为一致，无残留」（绿 ✓）／「代读配置可用——未验证连通」（中性）／
+>   「对本部署不适用——已被运行时缝取代」（中性，**没有**一键修复按钮）；面板**未**折叠为「环境就绪」，因为还有两项未验证（连通、modlens）——这正是「不冒充 ✓」的预期行为。
+> - **第 12 项**：仅单测证据（含「去掉跳过必须失败」的变异验证）；外部不可观察（DSH 不落盘内核 stdout），其前提 `seam.live=true` 已成立。
+> - 顺带登记（**既有行为**，非 0.3.0 引入）：卡片 modlens 行曾显示「状态未知」，而接口连续三次均返回 `paste: "off"`，疑为该次 loopback 探测未在时限内返回；方向保守、不影响判定，点「重新检测」可复现为「无粘贴冲突」。
 
 1. 装载：启动日志出现一行 `vision-bridge seam: installed on llm.resolveModelInfo (image capability injection active)`；无 error。
 2. 自证（§4.5-2）：日志 `runtime seam live — self-check passed (<provider>:<model>)`；取不到自证路由时是 `installed but not self-verified — …`（中性，不得出现假 ✓）。
